@@ -8,7 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from '@/components/
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Clock } from 'lucide-react';
+import { CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -17,9 +17,10 @@ import { useInterview } from '@/context/InterviewContext';
 type ScheduleFormData = {
   candidateEmail: string;
   techStackId: string;
-  date: Date;
-  time: string;
-  duration: string;
+  datetime: {
+    date: Date;
+    time: string;
+  };
 };
 
 const InterviewScheduler = () => {
@@ -27,8 +28,19 @@ const InterviewScheduler = () => {
   const form = useForm<ScheduleFormData>();
 
   const handleSubmit = (data: ScheduleFormData) => {
-    // This will be connected to Supabase later
-    console.log('Schedule interview:', data);
+    // Combine date and time into a single Date object
+    const { date } = data.datetime;
+    const [hours, minutes] = data.datetime.time.split(':');
+    
+    const combinedDateTime = new Date(date);
+    combinedDateTime.setHours(parseInt(hours), parseInt(minutes));
+
+    const scheduleData = {
+      ...data,
+      datetime: combinedDateTime,
+    };
+
+    console.log('Schedule interview:', scheduleData);
     toast.success('Interview scheduled successfully (demo)');
     form.reset();
   };
@@ -81,10 +93,10 @@ const InterviewScheduler = () => {
 
             <FormField
               control={form.control}
-              name="date"
+              name="datetime"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>Date</FormLabel>
+                  <FormLabel>Date & Time</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -95,65 +107,39 @@ const InterviewScheduler = () => {
                             !field.value && "text-muted-foreground"
                           )}
                         >
-                          {field.value ? (
-                            format(field.value, "PPP")
+                          {field.value?.date ? (
+                            <span>
+                              {format(field.value.date, "PPP")} at {field.value.time || "Select time"}
+                            </span>
                           ) : (
-                            <span>Pick a date</span>
+                            <span>Pick date and time</span>
                           )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          <CalendarClock className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) => date < new Date()}
-                        initialFocus
-                        className="pointer-events-auto"
-                      />
+                    <PopoverContent className="w-auto p-4" align="start">
+                      <div className="space-y-4">
+                        <Calendar
+                          mode="single"
+                          selected={field.value?.date}
+                          onSelect={(date) => field.onChange({ ...field.value, date })}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                        <div className="mt-4">
+                          <FormLabel>Time</FormLabel>
+                          <Input
+                            type="time"
+                            value={field.value?.time || ""}
+                            onChange={(e) => field.onChange({ ...field.value, time: e.target.value })}
+                            className="mt-2"
+                          />
+                        </div>
+                      </div>
                     </PopoverContent>
                   </Popover>
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="time"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Time</FormLabel>
-                  <FormControl>
-                    <div className="flex items-center space-x-2">
-                      <Input type="time" {...field} />
-                      <Clock className="h-4 w-4 opacity-50" />
-                    </div>
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="duration"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Duration (minutes)</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select duration" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="30">30 minutes</SelectItem>
-                      <SelectItem value="45">45 minutes</SelectItem>
-                      <SelectItem value="60">60 minutes</SelectItem>
-                      <SelectItem value="90">90 minutes</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </FormItem>
               )}
             />
