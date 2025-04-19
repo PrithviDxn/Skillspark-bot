@@ -1,8 +1,8 @@
-
 import React, { useState } from 'react';
-import { useInterview, TechStack, Question } from '@/context/InterviewContext';
+import { useInterview } from '@/context/InterviewContext';
 import { useAuth } from '@/context/AuthContext';
 import Layout from '@/components/Layout';
+import QuestionManager from '@/components/QuestionManager';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,6 @@ const AdminDashboard: React.FC = () => {
   const { availableTechStacks, interviews } = useInterview();
   const [activeTab, setActiveTab] = useState<'interviews' | 'techStacks'>('interviews');
   
-  // For demo purposes only - these would be functional in a real app
   const [newStackName, setNewStackName] = useState('');
   const [newStackDesc, setNewStackDesc] = useState('');
   
@@ -193,82 +192,7 @@ const AdminDashboard: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Add New Tech Stack</CardTitle>
-                <CardDescription>
-                  Create a new technology stack for interviews
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleAddTechStack} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="stack-name">Stack Name</Label>
-                    <Input 
-                      id="stack-name" 
-                      value={newStackName}
-                      onChange={(e) => setNewStackName(e.target.value)}
-                      placeholder="e.g., React, Python, Java" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="stack-description">Description</Label>
-                    <Textarea 
-                      id="stack-description" 
-                      value={newStackDesc}
-                      onChange={(e) => setNewStackDesc(e.target.value)}
-                      placeholder="Brief description of the technology stack" 
-                    />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    <Plus size={16} className="mr-2" />
-                    Add Tech Stack
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload Questions</CardTitle>
-                <CardDescription>
-                  Add interview questions for a specific tech stack
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleUploadQuestions} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="question-stack">Tech Stack</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a tech stack" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableTechStacks.map(stack => (
-                          <SelectItem key={stack.id} value={stack.id}>
-                            {stack.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="questions">Questions (JSON Format)</Label>
-                    <Textarea 
-                      id="questions" 
-                      placeholder='[{"text": "What is React?", "difficulty": "easy"}]' 
-                      rows={6}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    <Plus size={16} className="mr-2" />
-                    Upload Questions
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
+          <QuestionManager />
           
           <Card>
             <CardHeader>
