@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { techStackAPI, questionAPI } from '@/api';
+import { techStackAPI, questionAPI, aiAPI } from '@/api';
+import freeEvaluationService from '@/services/FreeEvaluationService';
 
 // Types
 export type TechStack = {
@@ -24,6 +25,12 @@ export type Answer = {
   transcript?: string;
   score?: number;
   feedback?: string;
+  criteria?: {
+    technicalAccuracy: number;
+    completeness: number;
+    clarity: number;
+    examples: number;
+  };
 };
 
 export type Interview = {
@@ -45,11 +52,13 @@ type InterviewContextType = {
   startInterview: (candidateId: string, stackId: string) => Promise<Interview>;
   endInterview: (interviewId: string) => Promise<void>;
   getQuestionsForStack: (stackId: string) => Question[];
-  saveAnswer: (interviewId: string, questionId: string, audioBlob: Blob) => Promise<void>;
+  saveAnswer: (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string) => Promise<void>;
   getInterviewDetails: (interviewId: string) => Interview | null;
   isLoading: boolean;
   refreshTechStacks: () => Promise<void>;
   refreshQuestions: (stackId: string) => Promise<void>;
+  useFreeMode: boolean;
+  setUseFreeMode: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 // Mock data - will use as fallback if API calls fail
@@ -295,6 +304,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isLoading, setIsLoading] = useState(false);
   const [availableTechStacks, setAvailableTechStacks] = useState<TechStack[]>([]);
   const [questionsByStack, setQuestionsByStack] = useState<Record<string, Question[]>>({});
+  const [useFreeMode, setUseFreeMode] = useState<boolean>(true); // Default to free mode
 
   // Fetch tech stacks on mount
   useEffect(() => {
@@ -392,7 +402,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const saveAnswer = async (interviewId: string, questionId: string, audioBlob: Blob): Promise<void> => {
+  const saveAnswer = async (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string): Promise<void> => {
     setIsLoading(true);
     
     try {
@@ -405,29 +415,95 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Create object URL for the audio blob
       const audioUrl = URL.createObjectURL(audioBlob);
       
-      // Transcribe audio (would call Whisper API in a real app)
-      const transcript = await mockTranscribe(audioBlob);
+      // Find the question and tech stack
+      const stackId = interview.stackId;
+      const stack = availableTechStacks.find(s => s.id === stackId);
       
-      // Find the question
-      const question = Object.values(mockQuestions)
-        .flat()
-        .find(q => q.id === questionId);
-        
+      // Find the question from our state
+      const question = questionsByStack[stackId]?.find(q => q.id === questionId) ||
+        Object.values(questionsByStack)
+          .flat()
+          .find(q => q.id === questionId);
+      
       if (!question) {
         throw new Error('Question not found');
       }
+
+      let finalTranscript = transcript;
+      let score, feedback, criteria;
       
-      // Evaluate answer (would call LLM in a real app)
-      const { score, feedback } = await mockEvaluateAnswer(question.text, transcript);
+      if (useFreeMode) {
+        // Free mode - use browser Speech Recognition if transcript provided, otherwise use mock
+        if (!finalTranscript) {
+          finalTranscript = await mockTranscribe(audioBlob);
+        }
+        
+        // Use our rule-based evaluation service
+        const evaluation = freeEvaluationService.evaluateAnswer(
+          question.text, 
+          finalTranscript, 
+          stack?.name
+        );
+        
+        score = evaluation.score;
+        feedback = evaluation.feedback;
+        criteria = evaluation.criteria;
+        
+        toast.success('Answer evaluated using local AI');
+      } else {
+        // Paid mode - Use OpenAI services
+        // Step 1: Transcribe audio with Whisper API if no transcript provided
+        if (!finalTranscript) {
+          try {
+            const transcriptionResponse = await aiAPI.transcribe(audioBlob);
+            finalTranscript = transcriptionResponse.data.data;
+            
+            if (!finalTranscript) {
+              throw new Error('Transcription failed');
+            }
+          } catch (error) {
+            console.error('Transcription error:', error);
+            toast.error('Transcription failed, using backup method');
+            // Fallback to mock transcription in case of failure
+            finalTranscript = await mockTranscribe(audioBlob);
+          }
+        }
+        
+        // Step 2: Evaluate answer with OpenAI GPT
+        try {
+          const evaluationResponse = await aiAPI.evaluate({
+            question: question.text,
+            transcript: finalTranscript,
+            techStack: stack?.name
+          });
+          
+          if (evaluationResponse.data && evaluationResponse.data.data) {
+            const evaluation = evaluationResponse.data.data;
+            score = evaluation.score;
+            feedback = evaluation.feedback;
+            criteria = evaluation.criteria;
+          } else {
+            throw new Error('Evaluation failed');
+          }
+        } catch (error) {
+          console.error('Evaluation error:', error);
+          toast.error('Evaluation failed, using backup method');
+          // Fallback to mock evaluation in case of failure
+          const mockEval = await mockEvaluateAnswer(question.text, finalTranscript);
+          score = mockEval.score;
+          feedback = mockEval.feedback;
+        }
+      }
       
       // Create answer object
       const answer: Answer = {
         id: Date.now().toString(),
         questionId,
         audioUrl,
-        transcript,
+        transcript: finalTranscript,
         score,
-        feedback
+        feedback,
+        criteria
       };
       
       // Update interview with new answer
@@ -448,6 +524,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       toast.success('Answer saved!');
     } catch (error) {
+      console.error('Failed to save answer:', error);
       toast.error('Failed to save answer');
       throw error;
     } finally {
@@ -531,7 +608,9 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         getInterviewDetails,
         isLoading,
         refreshTechStacks,
-        refreshQuestions
+        refreshQuestions,
+        useFreeMode,
+        setUseFreeMode
       }}
     >
       {children}

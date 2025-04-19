@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import fileUpload from 'express-fileupload';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
 
@@ -31,11 +32,18 @@ import questionRoutes from './routes/questions.js';
 import interviewRoutes from './routes/interviews.js';
 import answerRoutes from './routes/answers.js';
 import uploadRoutes from './routes/uploads.js';
+import aiRoutes from './routes/ai.js';
 
 const app = express();
 
 // Body parser
 app.use(express.json());
+
+// File upload middleware
+app.use(fileUpload({
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max file size
+  useTempFiles: false,
+}));
 
 // Enable CORS
 app.use(cors());
@@ -51,6 +59,7 @@ app.use('/api/v1/questions', questionRoutes);
 app.use('/api/v1/interviews', interviewRoutes);
 app.use('/api/v1/answers', answerRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 // Basic route
 app.get('/', (req, res) => {

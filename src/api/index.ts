@@ -118,5 +118,24 @@ export const userAPI = {
   delete: (id: string) => api.delete(`/users/${id}`),
 };
 
+// AI endpoints
+export const aiAPI = {
+  transcribe: (audioBlob: Blob) => {
+    // Create FormData object to send audio file
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.wav');
+    
+    // Send request with FormData
+    return api.post('/ai/transcribe', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  
+  evaluate: (data: { question: string, transcript: string, techStack?: string }) => 
+    api.post('/ai/evaluate', data)
+};
+
 export default api; 
  

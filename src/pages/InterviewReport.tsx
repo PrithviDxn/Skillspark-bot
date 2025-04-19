@@ -1,17 +1,32 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useInterview, Question, Interview as InterviewType, Answer } from '@/context/InterviewContext';
 import Layout from '@/components/Layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, Clock, User, Download } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, User, Download, CheckCircle, XCircle, Info } from 'lucide-react';
+import {
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ResponsiveContainer,
+  Tooltip
+} from 'recharts';
 
 type QuestionWithAnswer = {
   question: Question;
   answer: Answer | undefined;
 };
+
+// Add this interface for radar chart data
+interface RadarChartData {
+  subject: string;
+  score: number;
+  fullMark: number;
+}
 
 const InterviewReport: React.FC = () => {
   const { reportId } = useParams<{ reportId: string }>();
@@ -22,6 +37,9 @@ const InterviewReport: React.FC = () => {
   const [interview, setInterview] = useState<InterviewType | null>(null);
   const [questionsWithAnswers, setQuestionsWithAnswers] = useState<QuestionWithAnswer[]>([]);
   const [averageScore, setAverageScore] = useState<number | null>(null);
+  const [criteriaAverages, setCriteriaAverages] = useState<RadarChartData[] | null>(null);
+  const [strengths, setStrengths] = useState<string[]>([]);
+  const [weaknesses, setWeaknesses] = useState<string[]>([]);
   
   useEffect(() => {
     if (reportId) {
@@ -47,6 +65,83 @@ const InterviewReport: React.FC = () => {
         if (answeredQuestions.length > 0) {
           const total = answeredQuestions.reduce((sum, answer) => sum + (answer.score || 0), 0);
           setAverageScore(total / answeredQuestions.length);
+          
+          // Calculate criteria averages for radar chart
+          const criteriaSum = {
+            technicalAccuracy: 0,
+            completeness: 0,
+            clarity: 0,
+            examples: 0,
+            count: 0
+          };
+          
+          // Process feedback to extract strengths and weaknesses
+          const allStrengths: string[] = [];
+          const allWeaknesses: string[] = [];
+          
+          answeredQuestions.forEach(answer => {
+            if (answer.criteria) {
+              criteriaSum.technicalAccuracy += answer.criteria.technicalAccuracy;
+              criteriaSum.completeness += answer.criteria.completeness;
+              criteriaSum.clarity += answer.criteria.clarity;
+              criteriaSum.examples += answer.criteria.examples;
+              criteriaSum.count++;
+            }
+            
+            // Extract strengths and weaknesses from feedback
+            const feedback = answer.feedback || '';
+            if (feedback.includes('Strengths:')) {
+              const strengthsSection = feedback.split('Strengths:')[1].split('Areas for improvement:')[0];
+              const strengthPoints = strengthsSection.split('-').filter(item => item.trim().length > 0);
+              
+              strengthPoints.forEach(point => {
+                const trimmed = point.trim();
+                if (trimmed && !allStrengths.includes(trimmed)) {
+                  allStrengths.push(trimmed);
+                }
+              });
+            }
+            
+            if (feedback.includes('Areas for improvement:')) {
+              const weaknessesSection = feedback.split('Areas for improvement:')[1];
+              const weaknessPoints = weaknessesSection.split('-').filter(item => item.trim().length > 0);
+              
+              weaknessPoints.forEach(point => {
+                const trimmed = point.trim();
+                if (trimmed && !allWeaknesses.includes(trimmed)) {
+                  allWeaknesses.push(trimmed);
+                }
+              });
+            }
+          });
+          
+          setStrengths(allStrengths.slice(0, 5)); // Limit to top 5
+          setWeaknesses(allWeaknesses.slice(0, 5)); // Limit to top 5
+          
+          if (criteriaSum.count > 0) {
+            setCriteriaAverages([
+              {
+                subject: 'Technical Accuracy',
+                score: criteriaSum.technicalAccuracy / criteriaSum.count,
+                fullMark: 10
+              },
+              {
+                subject: 'Completeness',
+                score: criteriaSum.completeness / criteriaSum.count,
+                fullMark: 10
+              },
+              {
+                subject: 'Clarity',
+                score: criteriaSum.clarity / criteriaSum.count,
+                fullMark: 10
+              },
+              {
+                subject: 'Examples',
+                score: criteriaSum.examples / criteriaSum.count,
+                fullMark: 10
+              }
+            ]);
+          }
         }
       }
     }
@@ -95,6 +190,14 @@ const InterviewReport: React.FC = () => {
     if (score >= 6) return 'bg-yellow-100 text-yellow-800';
     return 'bg-red-100 text-red-800';
   };
+
+  const getScoreText = (score: number | undefined) => {
+    if (score === undefined) return 'Not Evaluated';
+    if (score >= 8) return 'Excellent';
+    if (score >= 6) return 'Good';
+    if (score >= 4) return 'Satisfactory';
+    return 'Needs Improvement';
+  };
   
   return (
     <Layout>
@@ -141,12 +244,16 @@ const InterviewReport: React.FC = () => {
           </Button>
         </div>
         
+        {/* Summary Card */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Summary</CardTitle>
+            <CardTitle>Interview Performance Summary</CardTitle>
+            <CardDescription>
+              Overall assessment of the candidate's performance in this interview
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="p-4 bg-gray-50 rounded-lg text-center">
                 <div className="text-sm text-gray-500 mb-1">Questions</div>
                 <div className="text-3xl font-bold">
@@ -159,42 +266,117 @@ const InterviewReport: React.FC = () => {
                   {interview.answers.length}
                 </div>
               </div>
-              <div className="p-4 bg-gray-50 rounded-lg text-center">
+              <div className={`p-4 rounded-lg text-center ${averageScore ? (averageScore >= 7 ? 'bg-green-50' : averageScore >= 5 ? 'bg-yellow-50' : 'bg-red-50') : 'bg-gray-50'}`}>
                 <div className="text-sm text-gray-500 mb-1">Average Score</div>
                 <div className="text-3xl font-bold">
                   {averageScore !== null ? averageScore.toFixed(1) : 'N/A'}
+                  <span className="text-sm font-normal"> / 10</span>
                 </div>
+                {averageScore !== null && (
+                  <div className="text-xs mt-1">
+                    {getScoreText(averageScore)}
+                  </div>
+                )}
               </div>
             </div>
+            
+            {criteriaAverages && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="h-72">
+                  <h3 className="text-sm font-medium text-center mb-2">Performance by Criteria</h3>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={criteriaAverages}>
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="subject" />
+                      <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                      <Radar
+                        name="Score"
+                        dataKey="score"
+                        stroke="#6366f1"
+                        fill="#6366f1"
+                        fillOpacity={0.5}
+                      />
+                      <Tooltip />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                <div>
+                  <div className="mb-4">
+                    <h3 className="text-sm font-medium mb-2">Strengths</h3>
+                    <ul className="space-y-2">
+                      {strengths.length > 0 ? (
+                        strengths.map((strength, index) => (
+                          <li key={index} className="flex items-start">
+                            <CheckCircle size={16} className="text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm">{strength}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm text-gray-500">No specific strengths identified</li>
+                      )}
+                    </ul>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Areas for Improvement</h3>
+                    <ul className="space-y-2">
+                      {weaknesses.length > 0 ? (
+                        weaknesses.map((weakness, index) => (
+                          <li key={index} className="flex items-start">
+                            <XCircle size={16} className="text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm">{weakness}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm text-gray-500">No specific areas for improvement identified</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
         
-        <h2 className="text-xl font-bold mb-4">Question Responses</h2>
+        <h2 className="text-xl font-bold mb-4">Detailed Question Responses</h2>
         
         {questionsWithAnswers.map(({ question, answer }) => (
           <Card key={question.id} className="mb-6">
             <CardContent className="p-6">
               <div className="mb-4">
-                <div className="flex justify-between items-start">
-                  <h3 className="text-lg font-medium">{question.text}</h3>
-                  <div className="flex items-center">
-                    <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 mr-2">
-                      {question.difficulty}
-                    </span>
-                    {answer?.score !== undefined && (
-                      <span className={`text-xs px-2 py-1 rounded ${getScoreColor(answer.score)}`}>
-                        Score: {answer.score}/10
+                <div className="flex justify-between items-start gap-4">
+                  <div>
+                    <div className="flex items-center mb-1">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mr-2 
+                        ${question.difficulty === 'easy' ? 'bg-green-100 text-green-800' : 
+                          question.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' : 
+                          'bg-red-100 text-red-800'}`}
+                      >
+                        {question.difficulty.toUpperCase()}
                       </span>
-                    )}
+                    </div>
+                    <h3 className="text-lg font-medium">{question.text}</h3>
                   </div>
+                  
+                  {answer?.score !== undefined && (
+                    <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-full border-2 
+                      ${answer.score >= 8 ? 'border-green-400 text-green-700' : 
+                        answer.score >= 6 ? 'border-yellow-400 text-yellow-700' : 
+                        'border-red-400 text-red-700'}`}
+                    >
+                      <div className="text-xl font-bold">{answer.score}</div>
+                      <div className="text-xs">/ 10</div>
+                    </div>
+                  )}
                 </div>
               </div>
               
               {answer ? (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">
-                      Audio Response
+                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <Info size={16} className="mr-1" /> Audio Response
                     </h4>
                     {answer.audioUrl ? (
                       <audio src={answer.audioUrl} controls className="w-full" />
@@ -204,21 +386,39 @@ const InterviewReport: React.FC = () => {
                   </div>
                   
                   <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">
-                      Transcript
+                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <Info size={16} className="mr-1" /> Transcript
                     </h4>
-                    <div className="p-3 bg-gray-50 rounded text-sm">
+                    <div className="p-4 bg-gray-50 rounded-lg text-sm">
                       {answer.transcript || 'No transcript available'}
                     </div>
                   </div>
                   
                   {answer.feedback && (
                     <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">
-                        AI Feedback
+                      <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <Info size={16} className="mr-1" /> AI Feedback
                       </h4>
-                      <div className="p-3 bg-blue-50 rounded text-sm">
+                      <div className="p-4 bg-blue-50 rounded-lg text-sm whitespace-pre-line">
                         {answer.feedback}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {answer.criteria && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <Info size={16} className="mr-1" /> Criteria Breakdown
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {Object.entries(answer.criteria).map(([key, value]) => (
+                          <div key={key} className="p-3 bg-gray-50 rounded-lg">
+                            <div className="text-xs text-gray-500 mb-1">
+                              {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                            </div>
+                            <div className="text-lg font-medium">{value} <span className="text-xs">/ 10</span></div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
