@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 
@@ -13,7 +12,6 @@ const Register: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'admin' | 'candidate'>('candidate');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -23,7 +21,8 @@ const Register: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      await register(name, email, password, role);
+      // Always register as candidate
+      await register(name, email, password, 'candidate');
       navigate('/');
     } catch (error) {
       // Error is handled in auth context
@@ -39,7 +38,7 @@ const Register: React.FC = () => {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">Create an account</CardTitle>
             <CardDescription className="text-center">
-              Enter your information to create an account
+              Enter your information to create a candidate account
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -75,24 +74,6 @@ const Register: React.FC = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
-              </div>
-              <div className="space-y-3">
-                <Label>Account Type</Label>
-                <RadioGroup 
-                  defaultValue="candidate" 
-                  value={role}
-                  onValueChange={(value) => setRole(value as 'admin' | 'candidate')}
-                  className="flex space-x-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="candidate" id="candidate" />
-                    <Label htmlFor="candidate">Candidate</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="admin" id="admin" />
-                    <Label htmlFor="admin">Administrator</Label>
-                  </div>
-                </RadioGroup>
               </div>
               <Button 
                 type="submit" 
