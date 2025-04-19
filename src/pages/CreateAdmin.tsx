@@ -4,10 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 
-const Register: React.FC = () => {
+const CreateAdmin: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,9 +20,9 @@ const Register: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Register as a regular user (no need to specify role for default 'user' role)
-      await register(name, email, password);
-      navigate('/');
+      // Register as an admin user by explicitly setting the role
+      await register(name, email, password, 'admin');
+      navigate('/admin/dashboard');
     } catch (error) {
       // Error is handled in auth context
     } finally {
@@ -35,9 +35,9 @@ const Register: React.FC = () => {
       <div className="w-full max-w-md mx-auto mt-8">
         <Card className="w-full">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center">Create an account</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center">Create Admin Account</CardTitle>
             <CardDescription className="text-center">
-              Enter your information to create a candidate account
+              Create a new administrator account with full system access
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -57,7 +57,7 @@ const Register: React.FC = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="your.email@example.com"
+                  placeholder="admin@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -79,16 +79,13 @@ const Register: React.FC = () => {
                 className="w-full" 
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Creating account...' : 'Create account'}
+                {isSubmitting ? 'Creating admin account...' : 'Create Admin Account'}
               </Button>
             </form>
           </CardContent>
           <CardFooter>
             <div className="text-sm text-center w-full text-gray-600">
-              Already have an account?{' '}
-              <Link to="/login" className="text-interview-primary hover:text-interview-accent">
-                Log in
-              </Link>
+              This account will have administrator privileges and full access to the system
             </div>
           </CardFooter>
         </Card>
@@ -97,4 +94,4 @@ const Register: React.FC = () => {
   );
 };
 
-export default Register;
+export default CreateAdmin; 

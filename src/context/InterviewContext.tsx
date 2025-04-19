@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -48,6 +47,7 @@ type InterviewContextType = {
   saveAnswer: (interviewId: string, questionId: string, audioBlob: Blob) => Promise<void>;
   getInterviewDetails: (interviewId: string) => Interview | null;
   isLoading: boolean;
+  refreshTechStacks: () => Promise<void>;
 };
 
 // Mock data
@@ -254,6 +254,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentInterview, setCurrentInterview] = useState<Interview | null>(null);
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [availableTechStacks, setAvailableTechStacks] = useState<TechStack[]>(mockTechStacks);
 
   const getQuestionsForStack = (stackId: string): Question[] => {
     return mockQuestions[stackId] || [];
@@ -392,10 +393,31 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return interviews.find(i => i.id === interviewId) || null;
   };
 
+  const refreshTechStacks = async (): Promise<void> => {
+    try {
+      // In a real application, this would call the API to get the latest tech stacks
+      // const response = await techStackAPI.getAll();
+      // if (response.data && response.data.data) {
+      //   setAvailableTechStacks(response.data.data.map(stack => ({
+      //     id: stack._id,
+      //     name: stack.name,
+      //     description: stack.description,
+      //     icon: getTechStackEmoji(stack.name)
+      //   })));
+      // }
+      
+      // For demo purposes, we'll just refresh with the mock data
+      toast.success('Tech stacks refreshed');
+    } catch (error) {
+      console.error('Error refreshing tech stacks:', error);
+      toast.error('Failed to refresh tech stacks');
+    }
+  };
+
   return (
     <InterviewContext.Provider
       value={{
-        availableTechStacks: mockTechStacks,
+        availableTechStacks,
         questionsByStack: mockQuestions,
         currentInterview,
         setCurrentInterview,
@@ -405,7 +427,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         getQuestionsForStack,
         saveAnswer,
         getInterviewDetails,
-        isLoading
+        isLoading,
+        refreshTechStacks
       }}
     >
       {children}

@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +16,7 @@ import Interview from "./pages/Interview";
 import InterviewReport from "./pages/InterviewReport";
 import NotAuthorized from "./pages/NotAuthorized";
 import NotFound from "./pages/NotFound";
+import CreateAdmin from "./pages/CreateAdmin";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +58,14 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute requiredRole="admin">
           <AdminDashboard />
+        </ProtectedRoute>
+      } 
+    />
+    <Route 
+      path="/admin/create" 
+      element={
+        <ProtectedRoute requiredRole="admin">
+          <CreateAdmin />
         </ProtectedRoute>
       } 
     />

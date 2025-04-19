@@ -1,19 +1,19 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { authAPI } from '../api';
 
 type User = {
-  id: string;
+  _id: string;
   name: string;
   email: string;
-  role: 'admin' | 'candidate';
+  role: 'admin' | 'user';
 };
 
 type AuthContextType = {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, role: 'admin' | 'candidate') => Promise<void>;
+  register: (name: string, email: string, password: string, role?: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -21,58 +21,46 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// For demo purposes, we'll use local storage to simulate a backend
-const mockUsers = [
-  {
-    id: '1',
-    name: 'Admin User',
-    email: 'admin@example.com',
-    password: 'admin123',
-    role: 'admin' as const
-  },
-  {
-    id: '2',
-    name: 'Candidate User',
-    email: 'candidate@example.com',
-    password: 'candidate123',
-    role: 'candidate' as const
-  }
-];
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Check if user is already logged in
-    const storedUser = localStorage.getItem('interview_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetchCurrentUser();
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await authAPI.getMe();
+      if (response.data && response.data.data) {
+        setUser(response.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user', error);
+      localStorage.removeItem('token');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Find user
-      const foundUser = mockUsers.find(
-        u => u.email === email && u.password === password
-      );
-      
-      if (!foundUser) {
-        throw new Error('Invalid credentials');
+      const response = await authAPI.login({ email, password });
+      if (response.data && response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        await fetchCurrentUser();
+        toast.success('Successfully logged in!');
+      } else {
+        throw new Error('Invalid response from server');
       }
-      
-      // Remove password before storing
-      const { password: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      localStorage.setItem('interview_user', JSON.stringify(userWithoutPassword));
-      toast.success('Successfully logged in!');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Login failed');
       throw error;
@@ -81,34 +69,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (name: string, email: string, password: string, role: 'admin' | 'candidate') => {
+  const register = async (name: string, email: string, password: string, role?: string) => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Check if user already exists
-      const userExists = mockUsers.some(u => u.email === email);
-      
-      if (userExists) {
-        throw new Error('User already exists');
+      const userData = { name, email, password };
+      // Only include role if it's specified and is 'admin'
+      if (role === 'admin') {
+        Object.assign(userData, { role });
       }
       
-      // Create new user
-      const newUser = {
-        id: Date.now().toString(),
-        name,
-        email,
-        role
-      };
-      
-      // In a real app, this would be an API call to register
-      mockUsers.push({ ...newUser, password });
-      
-      setUser(newUser);
-      localStorage.setItem('interview_user', JSON.stringify(newUser));
-      toast.success('Successfully registered!');
+      const response = await authAPI.register(userData);
+      if (response.data && response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        await fetchCurrentUser();
+        toast.success('Successfully registered!');
+      } else {
+        throw new Error('Invalid response from server');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Registration failed');
       throw error;
@@ -117,10 +95,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('interview_user');
-    toast.info('You have been logged out');
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch (error) {
+      console.error('Logout error', error);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('token');
+      toast.info('You have been logged out');
+    }
   };
 
   return (

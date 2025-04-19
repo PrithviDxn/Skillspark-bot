@@ -1,73 +1,115 @@
-# Welcome to your Lovable project
+# SkillSpark Interview AI
 
-## Project info
+An AI-powered interview platform that helps candidates practice technical interviews.
 
-**URL**: https://lovable.dev/projects/44fa7e58-c2c8-4c1e-9d1f-9995c2be75c5
+## Features
 
-## How can I edit this code?
+- Scheduled interviews for technical skills assessment
+- Multiple tech stacks support
+- Audio recording and transcription
+- AI evaluation and feedback
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- Frontend: React, Vite, Shadcn UI, TypeScript
+- Backend: Node.js, Express, MongoDB
+- Authentication: JWT
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/44fa7e58-c2c8-4c1e-9d1f-9995c2be75c5) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js (v16 or higher)
+- MongoDB (local or Atlas)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Installation
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+1. Clone the repository
+```
+git clone https://github.com/your-username/skill-spark-interview-ai.git
+cd skill-spark-interview-ai
 ```
 
-**Edit a file directly in GitHub**
+2. Install dependencies
+```
+npm install
+```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+3. Set up environment variables
+```
+# Create a .env file in the root directory with the following variables
+MONGO_URI=your_mongodb_connection_string
+PORT=5000
+JWT_SECRET=your_jwt_secret
+JWT_EXPIRE=30d
+```
 
-**Use GitHub Codespaces**
+4. Seed the database with sample data
+```
+npm run seed
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+5. Run the application
+```
+# Run frontend and backend concurrently
+npm run dev:all
 
-## What technologies are used for this project?
+# Or run them separately
+npm run dev       # Frontend
+npm run server:dev # Backend
+```
 
-This project is built with:
+6. Access the application
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:5000
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## API Endpoints
 
-## How can I deploy this project?
+### Auth
+- POST /api/v1/auth/register - Register user
+- POST /api/v1/auth/login - Login user
+- GET /api/v1/auth/me - Get current user
+- GET /api/v1/auth/logout - Logout user
 
-Simply open [Lovable](https://lovable.dev/projects/44fa7e58-c2c8-4c1e-9d1f-9995c2be75c5) and click on Share -> Publish.
+### Users
+- GET /api/v1/users - Get all users (Admin only)
+- GET /api/v1/users/:id - Get single user (Admin only)
+- POST /api/v1/users - Create user (Admin only)
+- PUT /api/v1/users/:id - Update user (Admin or own profile)
+- DELETE /api/v1/users/:id - Delete user (Admin only)
 
-## Can I connect a custom domain to my Lovable project?
+### Tech Stacks
+- GET /api/v1/techstacks - Get all tech stacks
+- GET /api/v1/techstacks/:id - Get single tech stack
+- POST /api/v1/techstacks - Create tech stack (Admin only)
+- PUT /api/v1/techstacks/:id - Update tech stack (Admin only)
+- DELETE /api/v1/techstacks/:id - Delete tech stack (Admin only)
 
-Yes, you can!
+### Questions
+- GET /api/v1/questions - Get all questions (with optional tech stack filter)
+- GET /api/v1/questions/:id - Get single question
+- POST /api/v1/questions - Create question (Admin only)
+- PUT /api/v1/questions/:id - Update question (Admin only)
+- DELETE /api/v1/questions/:id - Delete question (Admin only)
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Interviews
+- GET /api/v1/interviews - Get all interviews (Admin gets all, users get their own)
+- GET /api/v1/interviews/:id - Get single interview
+- POST /api/v1/interviews - Create interview (Admin only)
+- PUT /api/v1/interviews/:id - Update interview status
+- DELETE /api/v1/interviews/:id - Delete interview (Admin only)
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+### Answers
+- GET /api/v1/answers - Get answers (with optional interview filter)
+- GET /api/v1/answers/:id - Get single answer
+- POST /api/v1/answers - Create answer
+- PUT /api/v1/answers/:id - Update answer (candidates: audio/transcript, admins: score/feedback)
+- DELETE /api/v1/answers/:id - Delete answer (Admin only)
+
+### File Uploads
+- POST /api/v1/uploads - Upload audio file (requires authentication)
+- GET /uploads/:filename - Access uploaded files
+
+## License
+
+This project is licensed under the MIT License.
