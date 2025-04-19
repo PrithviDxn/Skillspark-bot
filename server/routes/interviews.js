@@ -75,11 +75,16 @@ router.get('/:id', protect, async (req, res) => {
 
 // @desc    Create new interview
 // @route   POST /api/v1/interviews
-// @access  Private (Admin only)
-router.post('/', protect, authorize('admin'), async (req, res) => {
+// @access  Private (Previously Admin only, now any authenticated user)
+router.post('/', protect, async (req, res) => {
   try {
     // Add user id as createdBy
     req.body.createdBy = req.user.id;
+    
+    // If user is not an admin, they can only create interviews for themselves
+    if (req.user.role !== 'admin') {
+      req.body.candidate = req.user.id;
+    }
     
     const interview = await Interview.create(req.body);
 

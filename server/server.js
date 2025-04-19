@@ -21,7 +21,34 @@ connectDB();
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('Uploads directory created');
+  console.log('Uploads directory created:', uploadsDir);
+} else {
+  console.log('Uploads directory exists:', uploadsDir);
+  
+  // Check if it's writable
+  try {
+    fs.accessSync(uploadsDir, fs.constants.W_OK);
+    console.log('Uploads directory is writable');
+  } catch (err) {
+    console.error('Uploads directory is not writable:', err);
+  }
+}
+
+// Create temp directory for file uploads if it doesn't exist
+const tempDir = path.join(__dirname, 'tmp');
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+  console.log('Temp directory created:', tempDir);
+} else {
+  console.log('Temp directory exists:', tempDir);
+  
+  // Check if it's writable
+  try {
+    fs.accessSync(tempDir, fs.constants.W_OK);
+    console.log('Temp directory is writable');
+  } catch (err) {
+    console.error('Temp directory is not writable:', err);
+  }
 }
 
 // Route files
@@ -42,7 +69,11 @@ app.use(express.json());
 // File upload middleware
 app.use(fileUpload({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max file size
-  useTempFiles: false,
+  useTempFiles: true,
+  tempFileDir: path.join(__dirname, 'tmp'),
+  createParentPath: true,
+  debug: true,
+  abortOnLimit: true
 }));
 
 // Enable CORS

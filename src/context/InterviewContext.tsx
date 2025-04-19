@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { techStackAPI, questionAPI, aiAPI } from '@/api';
+import { techStackAPI, questionAPI, aiAPI, interviewAPI, answerAPI, uploadAPI } from '@/api';
 import freeEvaluationService from '@/services/FreeEvaluationService';
 
 // Types
@@ -377,15 +377,28 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call the actual API instead of simulating
+      const response = await interviewAPI.create({
+        candidate: candidateId,
+        techStack: stackId,
+        scheduledDate: new Date().toISOString().split('T')[0],
+        scheduledTime: new Date().toISOString().split('T')[1].substring(0, 5),
+        duration: 30
+      });
       
+      if (!response.data || !response.data.data) {
+        throw new Error('Failed to create interview');
+      }
+      
+      const apiInterview = response.data.data;
+      
+      // Convert API format to our internal format
       const newInterview: Interview = {
-        id: Date.now().toString(),
-        candidateId,
-        stackId,
+        id: apiInterview._id,
+        candidateId: apiInterview.candidate,
+        stackId: apiInterview.techStack,
         status: 'in-progress',
-        createdAt: new Date().toISOString(),
+        createdAt: apiInterview.createdAt,
         answers: []
       };
       
@@ -395,7 +408,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       return newInterview;
     } catch (error) {
-      toast.error('Failed to start interview');
+      console.error('Failed to start interview:', error);
+      toast.error('Failed to start interview. Please try again.');
       throw error;
     } finally {
       setIsLoading(false);
@@ -506,7 +520,51 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         criteria
       };
       
-      // Update interview with new answer
+      // Try to upload the audio and save the answer to the database
+      try {
+        // Pass the Blob directly to the uploadAPI instead of creating a File
+        console.log('Uploading audio file, size:', audioBlob.size, 'bytes');
+        
+        // Use the uploadAPI to handle the file upload properly
+        const uploadResponse = await uploadAPI.uploadAudio(audioBlob);
+        
+        console.log('Upload response received:', uploadResponse);
+        
+        if (!uploadResponse.data || uploadResponse.data.success === false) {
+          console.error('Upload failed with response:', uploadResponse);
+          throw new Error('Failed to upload audio');
+        }
+        
+        // Extract the file URL from the response
+        const serverAudioUrl = uploadResponse.data.data.fileUrl;
+        console.log('File uploaded successfully with URL:', serverAudioUrl);
+        
+        // Now save the answer with the proper server-side audio URL
+        const answerResponse = await answerAPI.create({
+          interview: interviewId,
+          question: questionId,
+          transcript: finalTranscript,
+          audioUrl: serverAudioUrl
+        });
+        
+        // If we got a response, update the local answer ID with the server-generated one
+        if (answerResponse.data && answerResponse.data.data) {
+          const createdAnswerId = answerResponse.data.data._id;
+          answer.id = createdAnswerId;
+          
+          // Then update the answer with score, feedback, etc.
+          await answerAPI.update(createdAnswerId, {
+            score: score,
+            feedback: feedback
+          });
+        }
+      } catch (error) {
+        console.error('Failed to save answer to database:', error);
+        toast.warning('Answer saved locally but failed to store on server');
+        // Continue with local state update even if API fails
+      }
+      
+      // Update interview with new answer in local state
       const updatedInterview = {
         ...interview,
         answers: [...interview.answers, answer]
@@ -536,10 +594,13 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call the actual API
+      await interviewAPI.update(interviewId, {
+        status: 'completed',
+        completedAt: new Date().toISOString()
+      });
       
-      // Update interview status
+      // Update local state
       const updatedInterviews = interviews.map(interview => 
         interview.id === interviewId
           ? {
@@ -562,7 +623,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       toast.success('Interview completed!');
     } catch (error) {
-      toast.error('Failed to end interview');
+      console.error('Failed to end interview:', error);
+      toast.error('Failed to end interview. Please try again.');
       throw error;
     } finally {
       setIsLoading(false);

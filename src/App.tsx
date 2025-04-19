@@ -17,6 +17,7 @@ import InterviewReport from "./pages/InterviewReport";
 import NotAuthorized from "./pages/NotAuthorized";
 import NotFound from "./pages/NotFound";
 import CreateAdmin from "./pages/CreateAdmin";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,14 @@ const AppRoutes = () => (
     <Route path="/login" element={<Login />} />
     <Route path="/register" element={<Register />} />
     <Route path="/not-authorized" element={<NotAuthorized />} />
+    <Route 
+      path="/settings" 
+      element={
+        <ProtectedRoute>
+          <Settings />
+        </ProtectedRoute>
+      } 
+    />
     
     {/* Admin routes */}
     <Route 

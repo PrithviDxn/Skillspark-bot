@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, Settings } from 'lucide-react';
 
 const Header: React.FC = () => {
   const { user, logout, isAuthenticated } = useAuth();
@@ -45,6 +44,17 @@ const Header: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex items-center space-x-2"
+                asChild
+              >
+                <Link to="/settings">
+                  <Settings size={16} />
+                  <span className="ml-1">Settings</span>
+                </Link>
+              </Button>
               <Button 
                 variant="outline" 
                 size="sm" 

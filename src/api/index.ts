@@ -93,9 +93,20 @@ export const answerAPI = {
 
 // Upload endpoints
 export const uploadAPI = {
-  uploadAudio: (audioFile: File) => {
+  uploadAudio: (audioFile: File | Blob) => {
+    console.log('uploadAPI.uploadAudio called with file:', audioFile);
+    
     const formData = new FormData();
-    formData.append('audio', audioFile);
+    
+    // Handle both File and Blob objects
+    if (audioFile instanceof File) {
+      formData.append('audio', audioFile);
+    } else {
+      // If it's a Blob, convert to File with a name
+      formData.append('audio', new File([audioFile], 'recording.wav', { type: 'audio/wav' }));
+    }
+    
+    console.log('FormData created, sending request');
     
     // Create a custom axios instance for file uploads with multipart/form-data content type
     return axios.post(`${BASE_URL}/uploads`, formData, {

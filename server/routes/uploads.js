@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { protect } from '../middleware/auth.js';
 
@@ -11,98 +10,89 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-// Set up multer storage
-const storage = multer.diskStorage({
-  destination: function(req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads');
-    
-    // Check if directory exists, if not create it
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    
-    cb(null, uploadDir);
-  },
-  filename: function(req, file, cb) {
-    // Generate unique filename
-    const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.originalname)}`;
-    cb(null, uniqueFilename);
-  }
-});
-
-// Filter for audio files
-const fileFilter = (req, file, cb) => {
-  // Accept audio files only
-  if (file.mimetype.startsWith('audio/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only audio files are allowed!'), false);
-  }
-};
-
-// Initialize multer upload
-const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB max file size
-  }
-});
-
 // @desc    Upload audio file
 // @route   POST /api/v1/uploads
 // @access  Private
-router.post('/', protect, upload.single('audio'), async (req, res) => {
+router.post('/', protect, async (req, res) => {
   try {
-    if (!req.file) {
+    console.log('Upload request received');
+    
+    // Check if file was uploaded
+    if (!req.files) {
+      console.log('No files were uploaded');
       return res.status(400).json({
         success: false,
-        error: 'Please upload an audio file'
+        error: 'No files were uploaded'
+      });
+    }
+    
+    if (!req.files.audio) {
+      console.log('Audio file not found in request');
+      console.log('Available files:', Object.keys(req.files));
+      return res.status(400).json({
+        success: false,
+        error: 'Please upload a file with the field name "audio"'
       });
     }
 
-    // Return file URL
-    const fileUrl = `/uploads/${req.file.filename}`;
-
+    const file = req.files.audio;
+    console.log('File received:', file.name, file.size, 'bytes', file.mimetype);
+    
+    // Check file type
+    if (!file.mimetype.startsWith('audio/')) {
+      console.log('Invalid file type:', file.mimetype);
+      return res.status(400).json({
+        success: false,
+        error: `Only audio files are allowed. Received: ${file.mimetype}`
+      });
+    }
+    
+    // Create a unique filename
+    const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.name)}`;
+    
+    // Set upload path
+    const uploadDir = path.join(__dirname, '../uploads');
+    console.log('Upload directory:', uploadDir);
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+      console.log('Uploads directory created');
+    }
+    
+    const uploadPath = path.join(uploadDir, uniqueFilename);
+    console.log('File will be saved to:', uploadPath);
+    
+    try {
+      // Use the mv() method to move the file to the uploads directory
+      await file.mv(uploadPath);
+      console.log('File moved successfully');
+    } catch (mvError) {
+      console.error('Error moving file:', mvError);
+      return res.status(500).json({
+        success: false,
+        error: `Error saving file: ${mvError.message}`
+      });
+    }
+    
+    // Create file URL
+    const fileUrl = `/uploads/${uniqueFilename}`;
+    
+    console.log('Upload successful, returning URL:', fileUrl);
     res.status(200).json({
       success: true,
       data: {
-        fileName: req.file.filename,
+        fileName: uniqueFilename,
         fileUrl: fileUrl
       }
     });
   } catch (err) {
-    res.status(400).json({
-      success: false,
-      error: err.message
-    });
-  }
-});
-
-// Error handling for multer
-router.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    // A Multer error occurred when uploading
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        success: false,
-        error: 'File too large, max size is 10MB'
-      });
-    }
-    
-    return res.status(400).json({
-      success: false,
-      error: err.message
-    });
-  } else if (err) {
-    // An unknown error occurred
+    console.error('Upload error:', err);
     return res.status(500).json({
       success: false,
-      error: err.message
+      error: `Server error during upload: ${err.message}`
     });
   }
-  
-  next();
 });
 
 export default router; 
