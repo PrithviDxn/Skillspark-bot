@@ -1,10 +1,11 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 210 40% 98%;
     --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
@@ -13,42 +14,26 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 222.2 47.4% 11.2%;
+    --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 250 95.2% 63.9%;
+    --secondary-foreground: 210 40% 98%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 243.7 75.4% 58.6%;
+    --accent-foreground: 210 40% 98%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 221.2 83.2% 53.3%;
 
     --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
@@ -61,16 +46,16 @@
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 250 95.2% 63.9%;
     --secondary-foreground: 210 40% 98%;
 
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 217.2 32.6% 17.5%;
+    --accent: 243.7 75.4% 58.6%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62.8% 30.6%;
@@ -78,15 +63,7 @@
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --ring: 224.3 76.3% 48%;
   }
 }
 
@@ -99,3 +76,68 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom interview platform styles */
+.interview-container {
+  @apply min-h-screen bg-interview-background;
+}
+
+.record-pulse {
+  @apply relative;
+}
+
+.record-pulse::before {
+  content: '';
+  @apply absolute -inset-0.5 rounded-full bg-interview-danger opacity-75 animate-pulse;
+}
+
+.answer-card {
+  @apply bg-white shadow-md rounded-lg p-6 mb-4 transition-all duration-300 hover:shadow-lg;
+}
+
+.question-card {
+  @apply bg-white border border-gray-200 shadow-sm rounded-lg p-6 mb-6 transition-all duration-300;
+}
+
+.tech-stack-card {
+  @apply bg-white border border-gray-200 shadow-sm rounded-lg p-6 transition-all duration-300 hover:shadow-md hover:border-interview-primary cursor-pointer;
+}
+
+.tech-stack-card.selected {
+  @apply border-2 border-interview-primary shadow-md;
+}
+
+.interview-progress-bar {
+  @apply h-2 bg-gray-200 rounded-full overflow-hidden;
+}
+
+.interview-progress-bar-fill {
+  @apply h-full bg-interview-primary transition-all duration-500;
+}
+
+.microphone-wave {
+  @apply flex items-end justify-center space-x-1 h-12;
+}
+
+.microphone-wave-bar {
+  @apply w-1 bg-interview-primary rounded-t-sm;
+  animation: sound 1.2s ease-in-out infinite;
+}
+
+@keyframes sound {
+  0% {
+    height: 5px;
+  }
+  50% {
+    height: 30px;
+  }
+  100% {
+    height: 5px;
+  }
+}
+
+.microphone-wave-bar:nth-child(1) { animation-delay: 0.2s; }
+.microphone-wave-bar:nth-child(2) { animation-delay: 0.3s; }
+.microphone-wave-bar:nth-child(3) { animation-delay: 0.4s; }
+.microphone-wave-bar:nth-child(4) { animation-delay: 0.5s; }
+.microphone-wave-bar:nth-child(5) { animation-delay: 0.6s; }
