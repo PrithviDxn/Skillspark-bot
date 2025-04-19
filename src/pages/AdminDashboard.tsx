@@ -3,6 +3,7 @@ import { useInterview } from '@/context/InterviewContext';
 import { useAuth } from '@/context/AuthContext';
 import Layout from '@/components/Layout';
 import QuestionManager from '@/components/QuestionManager';
+import InterviewScheduler from '@/components/InterviewScheduler';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -84,6 +85,7 @@ const AdminDashboard: React.FC = () => {
       
       {activeTab === 'interviews' ? (
         <div className="space-y-6">
+          <InterviewScheduler />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
