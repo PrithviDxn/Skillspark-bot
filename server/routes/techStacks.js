@@ -55,13 +55,35 @@ router.get('/:id', async (req, res) => {
 // @access  Private (Admin only)
 router.post('/', protect, authorize('admin'), async (req, res) => {
   try {
+    console.log('Attempting to create tech stack with data:', req.body);
+    
+    // Check if required fields are present
+    if (!req.body.name || !req.body.description) {
+      console.log('Missing required fields');
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide name and description'
+      });
+    }
+    
     const techStack = await TechStack.create(req.body);
+    console.log('Tech stack created successfully:', techStack);
 
     res.status(201).json({
       success: true,
       data: techStack
     });
   } catch (err) {
+    console.error('Error creating tech stack:', err);
+    
+    // Check for duplicate key error (MongoDB code 11000)
+    if (err.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        error: 'A tech stack with that name already exists'
+      });
+    }
+    
     res.status(400).json({
       success: false,
       error: err.message

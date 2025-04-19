@@ -14,9 +14,9 @@ type TechStack = {
 const TechStackList: React.FC = () => {
   const [techStacks, setTechStacks] = useState<TechStack[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const { availableTechStacks, refreshTechStacks } = useInterview();
+  const { refreshTechStacks } = useInterview();
 
-  // Fetch tech stacks from the real API
+  // Fetch tech stacks from the API
   useEffect(() => {
     const fetchTechStacks = async () => {
       setIsLoading(true);
@@ -28,20 +28,13 @@ const TechStackList: React.FC = () => {
       } catch (error) {
         console.error('Error fetching tech stacks:', error);
         toast.error('Failed to load tech stacks');
-        
-        // Fall back to demo data if API call fails
-        setTechStacks(availableTechStacks.map(stack => ({
-          _id: stack.id,
-          name: stack.name,
-          description: stack.description
-        })));
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchTechStacks();
-  }, [availableTechStacks]);
+  }, []);
 
   const handleArchiveTechStack = async (id: string, name: string) => {
     try {

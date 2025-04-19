@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { techStackAPI, questionAPI } from '@/api';
 
 // Types
 export type TechStack = {
@@ -48,9 +49,10 @@ type InterviewContextType = {
   getInterviewDetails: (interviewId: string) => Interview | null;
   isLoading: boolean;
   refreshTechStacks: () => Promise<void>;
+  refreshQuestions: (stackId: string) => Promise<void>;
 };
 
-// Mock data
+// Mock data - will use as fallback if API calls fail
 const mockTechStacks: TechStack[] = [
   {
     id: '1',
@@ -250,14 +252,115 @@ const mockEvaluateAnswer = async (question: string, transcript: string): Promise
   return { score, feedback };
 };
 
+// Function to determine emoji for tech stack
+const getTechStackEmoji = (name: string) => {
+  const emojiMap: Record<string, string> = {
+    'React': '⚛️',
+    'Python': '🐍',
+    'Node.js': '🟢',
+    'Java': '☕',
+    'JavaScript': '𝗝𝗦',
+    'TypeScript': 'TS',
+    'Angular': '🅰️',
+    'Vue': '🟩',
+    'PHP': '🐘',
+    'Ruby': '💎',
+    'C#': '🎯',
+    'Go': '🐹',
+    'Swift': '🐦',
+    'Kotlin': '🎯',
+    'Rust': '🦀',
+  };
+  
+  return emojiMap[name] || '🔧';
+};
+
+// Add these interfaces
+interface ApiTechStack {
+  _id: string;
+  name: string;
+  description: string;
+}
+
+interface ApiQuestion {
+  _id: string;
+  techStack: string;
+  text: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+}
+
 export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentInterview, setCurrentInterview] = useState<Interview | null>(null);
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [availableTechStacks, setAvailableTechStacks] = useState<TechStack[]>(mockTechStacks);
+  const [availableTechStacks, setAvailableTechStacks] = useState<TechStack[]>([]);
+  const [questionsByStack, setQuestionsByStack] = useState<Record<string, Question[]>>({});
+
+  // Fetch tech stacks on mount
+  useEffect(() => {
+    fetchTechStacks();
+  }, []);
+
+  // Function to fetch tech stacks from API
+  const fetchTechStacks = async () => {
+    setIsLoading(true);
+    try {
+      const response = await techStackAPI.getAll();
+      if (response.data && response.data.data) {
+        const techStacks = response.data.data.map((stack: ApiTechStack) => ({
+          id: stack._id,
+          name: stack.name,
+          description: stack.description,
+          icon: getTechStackEmoji(stack.name)
+        }));
+        setAvailableTechStacks(techStacks);
+        
+        // Fetch questions for each tech stack
+        techStacks.forEach((stack: TechStack) => {
+          fetchQuestionsForStack(stack.id);
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching tech stacks:', error);
+      toast.error('Failed to load tech stacks, using mock data');
+      setAvailableTechStacks(mockTechStacks);
+      setQuestionsByStack(mockQuestions);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Function to fetch questions for a specific tech stack
+  const fetchQuestionsForStack = async (stackId: string) => {
+    try {
+      const response = await questionAPI.getByTechStack(stackId);
+      if (response.data && response.data.data) {
+        const questions = response.data.data.map((q: ApiQuestion) => ({
+          id: q._id,
+          stackId: q.techStack,
+          text: q.text,
+          difficulty: q.difficulty
+        }));
+        
+        setQuestionsByStack(prev => ({
+          ...prev,
+          [stackId]: questions
+        }));
+      }
+    } catch (error) {
+      console.error(`Error fetching questions for stack ${stackId}:`, error);
+      // If API call fails, use mock data as fallback if available
+      if (mockQuestions[stackId]) {
+        setQuestionsByStack(prev => ({
+          ...prev,
+          [stackId]: mockQuestions[stackId]
+        }));
+      }
+    }
+  };
 
   const getQuestionsForStack = (stackId: string): Question[] => {
-    return mockQuestions[stackId] || [];
+    return questionsByStack[stackId] || [];
   };
 
   const startInterview = async (candidateId: string, stackId: string): Promise<Interview> => {
@@ -395,18 +498,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const refreshTechStacks = async (): Promise<void> => {
     try {
-      // In a real application, this would call the API to get the latest tech stacks
-      // const response = await techStackAPI.getAll();
-      // if (response.data && response.data.data) {
-      //   setAvailableTechStacks(response.data.data.map(stack => ({
-      //     id: stack._id,
-      //     name: stack.name,
-      //     description: stack.description,
-      //     icon: getTechStackEmoji(stack.name)
-      //   })));
-      // }
-      
-      // For demo purposes, we'll just refresh with the mock data
+      await fetchTechStacks();
       toast.success('Tech stacks refreshed');
     } catch (error) {
       console.error('Error refreshing tech stacks:', error);
@@ -414,11 +506,21 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const refreshQuestions = async (stackId: string): Promise<void> => {
+    try {
+      await fetchQuestionsForStack(stackId);
+      toast.success('Questions refreshed');
+    } catch (error) {
+      console.error(`Error refreshing questions for stack ${stackId}:`, error);
+      toast.error('Failed to refresh questions');
+    }
+  };
+
   return (
     <InterviewContext.Provider
       value={{
         availableTechStacks,
-        questionsByStack: mockQuestions,
+        questionsByStack,
         currentInterview,
         setCurrentInterview,
         interviews,
@@ -428,7 +530,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         saveAnswer,
         getInterviewDetails,
         isLoading,
-        refreshTechStacks
+        refreshTechStacks,
+        refreshQuestions
       }}
     >
       {children}

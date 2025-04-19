@@ -39,12 +39,18 @@ const TechStackManager: React.FC<TechStackManagerProps> = ({ displayFullCard = f
     }
     
     setIsSubmitting(true);
+    console.log('Submitting tech stack:', { name: newStackName, description: newStackDescription });
     
     try {
+      const token = localStorage.getItem('token');
+      console.log('Authorization token present:', !!token);
+      
       const response = await techStackAPI.create({
         name: newStackName.trim(),
         description: newStackDescription.trim()
       });
+      
+      console.log('Tech stack creation response:', response);
       
       if (response.data && response.data.data) {
         toast.success(`Tech stack "${newStackName}" added successfully`);
@@ -61,7 +67,15 @@ const TechStackManager: React.FC<TechStackManagerProps> = ({ displayFullCard = f
       
       if (axios.isAxiosError(error)) {
         const axiosError = error as AxiosError;
-        if (axiosError.response?.data && typeof axiosError.response.data === 'object') {
+        console.log('Status code:', axiosError.response?.status);
+        console.log('Error response:', axiosError.response?.data);
+        
+        if (axiosError.response?.status === 401) {
+          toast.error('Authentication error: Please log in again');
+          // Consider redirecting to login page or refreshing token
+        } else if (axiosError.response?.status === 403) {
+          toast.error('You do not have permission to add tech stacks');
+        } else if (axiosError.response?.data && typeof axiosError.response.data === 'object') {
           const errorData = axiosError.response.data as { error?: string };
           toast.error(`Failed to add tech stack: ${errorData.error || 'Unknown error'}`);
         } else {

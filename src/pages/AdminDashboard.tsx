@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useInterview } from '@/context/InterviewContext';
 import { useAuth } from '@/context/AuthContext';
 import Layout from '@/components/Layout';
@@ -15,6 +15,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Archive, Clipboard, ClipboardCheck, UserPlus, Upload, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { userAPI } from '@/api';
+
+// Add this interface for user data
+interface AdminUser {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+}
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -22,6 +31,8 @@ const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'interviews' | 'techStacks' | 'users' | 'browse'>('interviews');
   const [selectedStack, setSelectedStack] = useState<string>('');
   const [selectedStackForBrowse, setSelectedStackForBrowse] = useState<string | null>(null);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [isLoadingAdmins, setIsLoadingAdmins] = useState(false);
   
   const completedInterviews = interviews.filter(interview => interview.status === 'completed');
   const pendingInterviews = interviews.filter(interview => interview.status !== 'completed');
@@ -39,6 +50,29 @@ const AdminDashboard: React.FC = () => {
 
     // Demo only - in real app this would send to backend
     toast.success(`File "${file.name}" uploaded successfully (demo)`);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'users') {
+      fetchAdminUsers();
+    }
+  }, [activeTab]);
+
+  const fetchAdminUsers = async () => {
+    setIsLoadingAdmins(true);
+    try {
+      const response = await userAPI.getAll();
+      if (response.data && response.data.data) {
+        // Filter to only get users with role 'admin'
+        const admins = response.data.data.filter((user: AdminUser) => user.role === 'admin');
+        setAdminUsers(admins);
+      }
+    } catch (error) {
+      console.error('Error fetching admin users:', error);
+      toast.error('Failed to load admin users');
+    } finally {
+      setIsLoadingAdmins(false);
+    }
   };
 
   if (!user || user.role !== 'admin') {
@@ -76,6 +110,70 @@ const AdminDashboard: React.FC = () => {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  const renderUserManagementTab = () => (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>User Management</CardTitle>
+          <CardDescription>
+            Create and manage administrator accounts
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-6">
+            <h3 className="text-lg font-medium mb-2">Create Administrator Account</h3>
+            <p className="text-gray-600 mb-4">
+              Create a new administrator account with full system access and privileges.
+            </p>
+            <Button asChild>
+              <Link to="/admin/create" className="flex items-center">
+                <UserPlus size={16} className="mr-2" />
+                Create Admin Account
+              </Link>
+            </Button>
+          </div>
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-medium mb-2">Current Administrators</h3>
+            <p className="text-gray-600 mb-4">
+              View and manage existing administrator accounts.
+            </p>
+            
+            {isLoadingAdmins ? (
+              <div className="text-center py-8">
+                <p>Loading administrators...</p>
+              </div>
+            ) : adminUsers.length > 0 ? (
+              <div className="space-y-4">
+                {adminUsers.map((admin) => (
+                  <div key={admin._id} className="border rounded-md p-4 flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">{admin.name}</p>
+                      <p className="text-sm text-gray-500">{admin.email}</p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button variant="outline" size="sm">
+                        Edit
+                      </Button>
+                      <Button variant="destructive" size="sm">
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <UserPlus className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-sm font-semibold">No administrators found</h3>
+                <p className="mt-1 text-sm">Create your first admin account using the form above</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 
   return (
     <Layout>
@@ -370,42 +468,7 @@ const AdminDashboard: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Management</CardTitle>
-              <CardDescription>
-                Create and manage administrator accounts
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-6">
-                <h3 className="text-lg font-medium mb-2">Create Administrator Account</h3>
-                <p className="text-gray-600 mb-4">
-                  Create a new administrator account with full system access and privileges.
-                </p>
-                <Button asChild>
-                  <Link to="/admin/create" className="flex items-center">
-                    <UserPlus size={16} className="mr-2" />
-                    Create Admin Account
-                  </Link>
-                </Button>
-              </div>
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-medium mb-2">Current Administrators</h3>
-                <p className="text-gray-600">
-                  View and manage existing administrator accounts.
-                </p>
-                {/* Admin user list would go here in a full implementation */}
-                <div className="text-center py-8 text-gray-500">
-                  <UserPlus className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-semibold">No admin data to display</h3>
-                  <p className="mt-1 text-sm">Demo implementation only</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        renderUserManagementTab()
       )}
     </Layout>
   );

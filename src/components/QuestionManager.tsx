@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,16 +8,18 @@ import { Label } from '@/components/ui/label';
 import { Upload, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useInterview } from '@/context/InterviewContext';
+import { questionAPI } from '@/api';
 
 interface QuestionManagerProps {
   showUploadSection?: boolean;
 }
 
 const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = true }) => {
-  const { availableTechStacks } = useInterview();
-  const [selectedStack, setSelectedStack] = React.useState<string>('');
-  const [questionText, setQuestionText] = React.useState<string>('');
-  const [difficulty, setDifficulty] = React.useState<string>('');
+  const { availableTechStacks, refreshQuestions } = useInterview();
+  const [selectedStack, setSelectedStack] = useState<string>('');
+  const [questionText, setQuestionText] = useState<string>('');
+  const [difficulty, setDifficulty] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -34,7 +36,7 @@ const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = t
     toast.success(`File "${file.name}" uploaded successfully (demo)`);
   };
 
-  const handleSingleQuestion = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSingleQuestion = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!selectedStack) {
@@ -52,12 +54,34 @@ const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = t
       return;
     }
     
-    // In a real app, this would call questionAPI.create with the form data
-    toast.success('Question added successfully (demo)');
+    setIsSubmitting(true);
     
-    // Reset form
-    setQuestionText('');
-    setDifficulty('');
+    try {
+      // Call the API to create a new question
+      const response = await questionAPI.create({
+        techStack: selectedStack,
+        text: questionText,
+        difficulty: difficulty
+      });
+      
+      if (response.data && response.data.success) {
+        toast.success('Question added successfully');
+        
+        // Refresh questions for this stack
+        await refreshQuestions(selectedStack);
+        
+        // Reset form
+        setQuestionText('');
+        setDifficulty('');
+      } else {
+        toast.error('Failed to add question');
+      }
+    } catch (error) {
+      console.error('Error adding question:', error);
+      toast.error('Failed to add question');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -144,6 +168,7 @@ const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = t
                 className="min-h-[100px]"
                 value={questionText}
                 onChange={(e) => setQuestionText(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-2">
@@ -159,9 +184,9 @@ const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = t
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="w-full">
+            <Button type="submit" disabled={isSubmitting} className="w-full">
               <Plus className="w-4 h-4 mr-2" />
-              Add Question
+              {isSubmitting ? 'Adding...' : 'Add Question'}
             </Button>
           </form>
         </CardContent>

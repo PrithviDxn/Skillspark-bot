@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useInterview, TechStack } from '@/context/InterviewContext';
@@ -20,7 +19,7 @@ const CandidateSelect: React.FC = () => {
     
     setIsLoading(true);
     try {
-      const interview = await startInterview(user.id, selectedStack);
+      const interview = await startInterview(user._id, selectedStack);
       navigate(`/interview/${interview.id}`);
     } catch (error) {
       console.error('Failed to start interview:', error);
@@ -29,7 +28,7 @@ const CandidateSelect: React.FC = () => {
     }
   };
 
-  if (!user || user.role !== 'candidate') {
+  if (!user || user.role !== 'user') {
     return (
       <Layout>
         <div className="text-center">

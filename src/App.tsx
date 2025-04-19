@@ -26,7 +26,7 @@ const ProtectedRoute = ({
   requiredRole
 }: { 
   children: JSX.Element, 
-  requiredRole?: 'admin' | 'candidate' 
+  requiredRole?: 'admin' | 'user' 
 }) => {
   const { isAuthenticated, user, isLoading } = useAuth();
   
@@ -82,7 +82,7 @@ const AppRoutes = () => (
     <Route 
       path="/candidate/select" 
       element={
-        <ProtectedRoute requiredRole="candidate">
+        <ProtectedRoute requiredRole="user">
           <CandidateSelect />
         </ProtectedRoute>
       } 
