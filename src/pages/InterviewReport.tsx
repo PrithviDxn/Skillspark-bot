@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useInterview, Question, Interview as InterviewType, Answer } from '@/context/InterviewContext';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, Clock, User, Download, CheckCircle, XCircle, Info } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, User, Download, CheckCircle, XCircle, Info, RefreshCw } from 'lucide-react';
 import {
   Radar,
   RadarChart,
@@ -31,7 +31,7 @@ interface RadarChartData {
 const InterviewReport: React.FC = () => {
   const { reportId } = useParams<{ reportId: string }>();
   const { user } = useAuth();
-  const { interviews, getQuestionsForStack, availableTechStacks } = useInterview();
+  const { interviews, getQuestionsForStack, availableTechStacks, refreshQuestions, refreshInterview } = useInterview();
   const navigate = useNavigate();
   
   const [interview, setInterview] = useState<InterviewType | null>(null);
@@ -40,31 +40,155 @@ const InterviewReport: React.FC = () => {
   const [criteriaAverages, setCriteriaAverages] = useState<RadarChartData[] | null>(null);
   const [strengths, setStrengths] = useState<string[]>([]);
   const [weaknesses, setWeaknesses] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   
-  useEffect(() => {
+  const loadInterviewData = useCallback(async () => {
     if (reportId) {
-      const foundInterview = interviews.find(i => i.id === reportId);
+      let foundInterview = interviews.find(i => i.id === reportId);
+      
+      // If not found in state or we're refreshing, try to fetch from server
+      if (!foundInterview || isRefreshing) {
+        console.log('Interview not found in state or refreshing, fetching from server');
+        const refreshedInterview = await refreshInterview(reportId);
+        if (refreshedInterview) {
+          foundInterview = refreshedInterview;
+        }
+        setIsRefreshing(false);
+      }
       
       if (foundInterview) {
+        console.log('Found interview:', foundInterview);
         setInterview(foundInterview);
         
         // Get questions for this stack
         const questions = getQuestionsForStack(foundInterview.stackId);
+        console.log('Questions for stack:', questions);
+        
+        // Debug answers
+        console.log('Found interview answers:', foundInterview.answers);
+
+        let qaMap: QuestionWithAnswer[] = [];
+        
+        // First check if we have any questions from the tech stack
+        if (questions && questions.length > 0) {
+          // Utility function to determine if question and answer match
+          const isMatchingQuestionAndAnswer = (question: Question, answer: Answer) => {
+            // Method 1: Direct ID match
+            if (answer.questionId === question.id) {
+              return true;
+            }
+            
+            // Method 2: Substring match in either direction
+            if (answer.questionId.includes(question.id) || question.id.includes(answer.questionId)) {
+              return true;
+            }
+            
+            // Method 3: Match by question text (if there's only one question with this exact text)
+            const normalizedQuestionText = question.text.toLowerCase().trim();
+            const matchingQuestionsWithSameText = questions.filter(q => 
+              q.text.toLowerCase().trim() === normalizedQuestionText
+            );
+            
+            if (matchingQuestionsWithSameText.length === 1) {
+              console.log(`Only one question with text "${question.text.substring(0, 20)}..." - assuming match`);
+              return true;
+            }
+            
+            return false;
+          };
         
         // Map questions to their answers
-        const qaMap = questions.map(question => ({
+          qaMap = questions.map(question => {
+            // Find a matching answer for this question
+            const matchingAnswer = foundInterview.answers.find(answer => 
+              isMatchingQuestionAndAnswer(question, answer)
+            );
+            
+            console.log(`Question ${question.id} (${question.text.substring(0, 20)}...) -> Answer:`, 
+              matchingAnswer ? `FOUND (id: ${matchingAnswer.id})` : 'NOT FOUND');
+            
+            return {
           question,
-          answer: foundInterview.answers.find(a => a.questionId === question.id)
-        }));
+              answer: matchingAnswer
+            };
+          });
+        } else {
+          // FALLBACK: If no questions available for this stack, create placeholder questions for each answer
+          console.log('No questions found for stack, creating placeholder questions for answers');
+          
+          if (foundInterview.answers && foundInterview.answers.length > 0) {
+            console.log(`Creating placeholder questions for ${foundInterview.answers.length} answers`);
+            
+            // Try to refresh questions for this stack as a first step
+            await refreshQuestions(foundInterview.stackId);
+            
+            qaMap = foundInterview.answers.map(answer => {
+              // Log complete answer data for debugging
+              console.log('Full answer data for placeholder question:', answer);
+              
+              // Try to find the original question from any tech stack
+              const allQuestions = Object.values(availableTechStacks)
+                .flatMap(stack => getQuestionsForStack(stack.id));
+                
+              // First look for exact match by ID
+              const matchingQuestion = allQuestions.find(q => q.id === answer.questionId);
+              if (matchingQuestion) {
+                console.log('Found matching question in stack:', matchingQuestion);
+                return {
+                  question: matchingQuestion,
+                  answer: answer
+                };
+              }
+              
+              // Next try substring match (some databases store IDs differently)
+              const substringMatchQuestion = allQuestions.find(q => 
+                q.id.includes(answer.questionId) || answer.questionId.includes(q.id)
+              );
+              
+              if (substringMatchQuestion) {
+                console.log('Found substring matching question:', substringMatchQuestion);
+                return {
+                  question: substringMatchQuestion,
+                  answer: answer
+                };
+              }
+              
+              // Create a placeholder with a default question
+              const questionText = "Question not found in database";
+              
+              console.log(`Using placeholder question text: ${questionText}`);
+              
+              // Create a placeholder question based on the answer
+              const placeholder: Question = {
+                id: answer.questionId || `placeholder-${Date.now()}`,
+                stackId: foundInterview.stackId,
+                text: questionText,
+                difficulty: 'medium'
+              };
+              
+              return {
+                question: placeholder,
+                answer: answer
+              };
+            });
+          } else {
+            console.error('No questions and no answers available for this interview', foundInterview);
+          }
+        }
         
         setQuestionsWithAnswers(qaMap);
         
         // Calculate average score
         const answeredQuestions = foundInterview.answers.filter(a => a.score !== undefined);
+        console.log(`Found ${answeredQuestions.length} answers with scores:`, 
+          answeredQuestions.map(a => ({ id: a.id, score: a.score, hasCriteria: !!a.criteria })));
         
         if (answeredQuestions.length > 0) {
           const total = answeredQuestions.reduce((sum, answer) => sum + (answer.score || 0), 0);
-          setAverageScore(total / answeredQuestions.length);
+          const avgScore = total / answeredQuestions.length;
+          console.log(`Calculated average score: ${avgScore} from total ${total}`);
+          setAverageScore(avgScore);
           
           // Calculate criteria averages for radar chart
           const criteriaSum = {
@@ -80,12 +204,39 @@ const InterviewReport: React.FC = () => {
           const allWeaknesses: string[] = [];
           
           answeredQuestions.forEach(answer => {
+            console.log(`Processing answer ${answer.id}:`, answer);
+            
+            // Debug the full answer object to see its structure
+            console.log('Full answer object:', JSON.stringify(answer, null, 2));
+            
+            // Always increment the count, even if criteria are missing
+            criteriaSum.count++;
+            
             if (answer.criteria) {
-              criteriaSum.technicalAccuracy += answer.criteria.technicalAccuracy;
-              criteriaSum.completeness += answer.criteria.completeness;
-              criteriaSum.clarity += answer.criteria.clarity;
-              criteriaSum.examples += answer.criteria.examples;
-              criteriaSum.count++;
+              console.log('Processing criteria for answer:', answer.id, answer.criteria);
+              // Create a safe accessor function to avoid undefined errors
+              const getCriteriaValue = (field) => {
+                if (!answer.criteria || typeof answer.criteria[field] !== 'number') {
+                  console.log(`Missing or invalid criteria field ${field} for answer:`, answer.id);
+                  return 0;
+                }
+                return answer.criteria[field];
+              };
+              
+              criteriaSum.technicalAccuracy += getCriteriaValue('technicalAccuracy');
+              criteriaSum.completeness += getCriteriaValue('completeness');
+              criteriaSum.clarity += getCriteriaValue('clarity');
+              criteriaSum.examples += getCriteriaValue('examples');
+            } else {
+              console.log('No criteria found for answer:', answer.id);
+              // If no criteria, just use the overall score for all criteria as a fallback
+              if (answer.score) {
+                const fallbackScore = answer.score;
+                criteriaSum.technicalAccuracy += fallbackScore;
+                criteriaSum.completeness += fallbackScore;
+                criteriaSum.clarity += fallbackScore;
+                criteriaSum.examples += fallbackScore;
+              }
             }
             
             // Extract strengths and weaknesses from feedback
@@ -141,11 +292,33 @@ const InterviewReport: React.FC = () => {
                 fullMark: 10
               }
             ]);
+            console.log('Set criteria averages:', criteriaSum);
+          } else if (averageScore !== null) {
+            // If we have an average score but no criteria, create default criteria based on the average
+            console.log('Creating default criteria based on average score:', averageScore);
+            setCriteriaAverages([
+              { subject: 'Technical Accuracy', score: averageScore, fullMark: 10 },
+              { subject: 'Completeness', score: averageScore, fullMark: 10 },
+              { subject: 'Clarity', score: averageScore, fullMark: 10 },
+              { subject: 'Examples', score: averageScore, fullMark: 10 }
+            ]);
           }
         }
       }
     }
-  }, [reportId, interviews, getQuestionsForStack]);
+  }, [reportId, interviews, getQuestionsForStack, refreshInterview, isRefreshing, availableTechStacks]);
+  
+  useEffect(() => {
+    loadInterviewData();
+  }, [loadInterviewData]);
+  
+  const refreshData = async () => {
+    if (reportId) {
+      setIsRefreshing(true);
+      await refreshInterview(reportId);
+      loadInterviewData();
+    }
+  };
   
   // Get tech stack name
   const techStack = interview
@@ -226,7 +399,7 @@ const InterviewReport: React.FC = () => {
               <div className="flex items-center">
                 <Clock size={16} className="mr-1" />
                 <span>
-                  {interview.status}
+                  {interview.completedAt ? `Completed: ${formatDate(interview.completedAt)}` : 'In Progress'}
                 </span>
               </div>
               <div className="flex items-center">
@@ -238,11 +411,84 @@ const InterviewReport: React.FC = () => {
             </div>
           </div>
           
-          <Button className="flex items-center">
-            <Download size={16} className="mr-2" />
-            Export Report
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowDebug(!showDebug)}>
+              {showDebug ? 'Hide Debug' : 'Show Debug'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={refreshData}>
+              <RefreshCw size={16} className="mr-1" /> Refresh Data
+            </Button>
+            <Button variant="default" size="sm" onClick={loadInterviewData}>
+              Force Reload
           </Button>
+          </div>
         </div>
+        
+        {showDebug && (
+          <Card className="mb-6 bg-gray-50">
+            <CardHeader>
+              <CardTitle>Debug Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium">Interview ID: {interview.id}</h3>
+                  <p className="text-xs">Stack ID: {interview.stackId}</p>
+                  <p className="text-xs">Status: {interview.status}</p>
+                  <p className="text-xs">Answers Count: {interview.answers.length}</p>
+                  <p className="text-xs">Answered Questions Count: {interview.answers.filter(a => a.score !== undefined).length}</p>
+                  <p className="text-xs">Average Score: {averageScore !== null ? averageScore.toFixed(1) : 'N/A'}</p>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium">Answer Scores:</h3>
+                  <pre className="text-xs bg-gray-100 p-2 overflow-auto max-h-32">
+                    {JSON.stringify(interview.answers.map(a => ({
+                      id: a.id,
+                      questionId: a.questionId,
+                      score: a.score,
+                      hasCriteria: !!a.criteria,
+                      criteriaKeys: a.criteria ? Object.keys(a.criteria) : []
+                    })), null, 2)}
+                  </pre>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium">Tech Stack Information:</h3>
+                  <p className="text-xs">Selected Stack: {techStack ? `${techStack.name} (${techStack.id})` : 'Not Found'}</p>
+                  <p className="text-xs">Available Stacks: {availableTechStacks.map(s => `${s.name} (${s.id})`).join(', ')}</p>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium">Questions in Stack:</h3>
+                  <p className="text-xs">Count: {getQuestionsForStack(interview.stackId).length}</p>
+                  <pre className="text-xs bg-gray-100 p-2 overflow-auto max-h-32">
+                    {JSON.stringify(getQuestionsForStack(interview.stackId).map(q => ({ id: q.id, text: q.text.substring(0, 30) })), null, 2)}
+                  </pre>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium">Interview Answers:</h3>
+                  <pre className="text-xs bg-gray-100 p-2 overflow-auto max-h-32">
+                    {JSON.stringify(interview.answers.map(a => ({ id: a.id, questionId: a.questionId, hasTranscript: !!a.transcript })), null, 2)}
+                  </pre>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium">Mapped Q&A:</h3>
+                  <pre className="text-xs bg-gray-100 p-2 overflow-auto max-h-32">
+                    {JSON.stringify(questionsWithAnswers.map(qa => ({ 
+                      questionId: qa.question.id, 
+                      questionText: qa.question.text.substring(0, 30),
+                      hasAnswer: !!qa.answer,
+                      answerId: qa.answer?.id
+                    })), null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         
         {/* Summary Card */}
         <Card className="mb-8">
@@ -257,7 +503,7 @@ const InterviewReport: React.FC = () => {
               <div className="p-4 bg-gray-50 rounded-lg text-center">
                 <div className="text-sm text-gray-500 mb-1">Questions</div>
                 <div className="text-3xl font-bold">
-                  {questionsWithAnswers.length}
+                  {interview.answers.length > 0 ? Math.max(questionsWithAnswers.length, interview.answers.length) : 0}
                 </div>
               </div>
               <div className="p-4 bg-gray-50 rounded-lg text-center">
@@ -269,7 +515,7 @@ const InterviewReport: React.FC = () => {
               <div className={`p-4 rounded-lg text-center ${averageScore ? (averageScore >= 7 ? 'bg-green-50' : averageScore >= 5 ? 'bg-yellow-50' : 'bg-red-50') : 'bg-gray-50'}`}>
                 <div className="text-sm text-gray-500 mb-1">Average Score</div>
                 <div className="text-3xl font-bold">
-                  {averageScore !== null ? averageScore.toFixed(1) : 'N/A'}
+                  {averageScore !== null ? averageScore.toFixed(1) : (interview.answers.length > 0 ? 'Calculating...' : 'N/A')}
                   <span className="text-sm font-normal"> / 10</span>
                 </div>
                 {averageScore !== null && (
@@ -280,7 +526,7 @@ const InterviewReport: React.FC = () => {
               </div>
             </div>
             
-            {criteriaAverages && (
+            {criteriaAverages && criteriaAverages.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="h-72">
                   <h3 className="text-sm font-medium text-center mb-2">Performance by Criteria</h3>
@@ -335,48 +581,55 @@ const InterviewReport: React.FC = () => {
                   </div>
                 </div>
               </div>
+            ) : (
+              interview.answers.length > 0 && (
+                <div className="text-center py-6">
+                  <p className="text-gray-500">Evaluation data is loading or not available</p>
+                </div>
+              )
             )}
           </CardContent>
         </Card>
         
         <h2 className="text-xl font-bold mb-4">Detailed Question Responses</h2>
         
-        {questionsWithAnswers.map(({ question, answer }) => (
-          <Card key={question.id} className="mb-6">
+        {questionsWithAnswers.length > 0 ? (
+          questionsWithAnswers.map(({ question, answer }) => (
+            <Card key={question.id || `question-${Math.random()}`} className="mb-6">
             <CardContent className="p-6">
               <div className="mb-4">
-                <div className="flex justify-between items-start gap-4">
-                  <div>
-                    <div className="flex items-center mb-1">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mr-2 
-                        ${question.difficulty === 'easy' ? 'bg-green-100 text-green-800' : 
-                          question.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-red-100 text-red-800'}`}
+                  <div className="flex justify-between items-start gap-4">
+                    <div>
+                      <div className="flex items-center mb-1">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mr-2 
+                          ${question.difficulty === 'easy' ? 'bg-green-100 text-green-800' : 
+                            question.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' : 
+                            'bg-red-100 text-red-800'}`}
+                        >
+                          {question.difficulty ? question.difficulty.toUpperCase() : 'UNKNOWN'}
+                    </span>
+                      </div>
+                      <h3 className="text-lg font-medium">{question.text || 'Question text not available'}</h3>
+                    </div>
+                    
+                    {answer?.score !== undefined && (
+                      <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-full border-2 
+                        ${answer.score >= 8 ? 'border-green-400 text-green-700' : 
+                          answer.score >= 6 ? 'border-yellow-400 text-yellow-700' : 
+                          'border-red-400 text-red-700'}`}
                       >
-                        {question.difficulty.toUpperCase()}
-                      </span>
-                    </div>
-                    <h3 className="text-lg font-medium">{question.text}</h3>
-                  </div>
-                  
-                  {answer?.score !== undefined && (
-                    <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-full border-2 
-                      ${answer.score >= 8 ? 'border-green-400 text-green-700' : 
-                        answer.score >= 6 ? 'border-yellow-400 text-yellow-700' : 
-                        'border-red-400 text-red-700'}`}
-                    >
-                      <div className="text-xl font-bold">{answer.score}</div>
-                      <div className="text-xs">/ 10</div>
-                    </div>
-                  )}
+                        <div className="text-xl font-bold">{answer.score}</div>
+                        <div className="text-xs">/ 10</div>
+                      </div>
+                    )}
                 </div>
               </div>
               
               {answer ? (
-                <div className="space-y-6">
+                  <div className="space-y-6">
                   <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                      <Info size={16} className="mr-1" /> Audio Response
+                      <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <Info size={16} className="mr-1" /> Audio Response
                     </h4>
                     {answer.audioUrl ? (
                       <audio src={answer.audioUrl} controls className="w-full" />
@@ -386,39 +639,44 @@ const InterviewReport: React.FC = () => {
                   </div>
                   
                   <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                      <Info size={16} className="mr-1" /> Transcript
+                      <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <Info size={16} className="mr-1" /> Transcript
                     </h4>
-                    <div className="p-4 bg-gray-50 rounded-lg text-sm">
+                      <div className="p-4 bg-gray-50 rounded-lg text-sm">
                       {answer.transcript || 'No transcript available'}
                     </div>
                   </div>
                   
                   {answer.feedback && (
                     <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                        <Info size={16} className="mr-1" /> AI Feedback
+                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                          <Info size={16} className="mr-1" /> AI Feedback
                       </h4>
-                      <div className="p-4 bg-blue-50 rounded-lg text-sm whitespace-pre-line">
+                        <div className="p-4 bg-blue-50 rounded-lg text-sm whitespace-pre-line">
                         {answer.feedback}
                       </div>
                     </div>
                   )}
-                  
-                  {answer.criteria && (
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                        <Info size={16} className="mr-1" /> Criteria Breakdown
-                      </h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {Object.entries(answer.criteria).map(([key, value]) => (
-                          <div key={key} className="p-3 bg-gray-50 rounded-lg">
-                            <div className="text-xs text-gray-500 mb-1">
-                              {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                            </div>
-                            <div className="text-lg font-medium">{value} <span className="text-xs">/ 10</span></div>
-                          </div>
-                        ))}
+                    
+                    {answer.criteria && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                          <Info size={16} className="mr-1" /> Criteria Breakdown
+                        </h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {answer.criteria && Object.entries(answer.criteria).map(([key, value]) => {
+                            // Skip if value is not a number
+                            if (typeof value !== 'number') return null;
+                            
+                            return (
+                              <div key={key} className="p-3 bg-gray-50 rounded-lg">
+                                <div className="text-xs text-gray-500 mb-1">
+                                  {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                                </div>
+                                <div className="text-lg font-medium">{value} <span className="text-xs">/ 10</span></div>
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   )}
@@ -430,7 +688,12 @@ const InterviewReport: React.FC = () => {
               )}
             </CardContent>
           </Card>
-        ))}
+          ))
+        ) : (
+          <div className="text-center py-6 text-gray-500">
+            <p>No questions found for this interview</p>
+          </div>
+        )}
       </div>
     </Layout>
   );

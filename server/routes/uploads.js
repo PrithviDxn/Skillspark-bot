@@ -16,19 +16,25 @@ const router = express.Router();
 router.post('/', protect, async (req, res) => {
   try {
     console.log('Upload request received');
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Body keys:', Object.keys(req.body));
     
     // Check if file was uploaded
     if (!req.files) {
-      console.log('No files were uploaded');
+      console.log('No files were uploaded, req.files is', req.files);
+      console.log('Request content type:', req.headers['content-type']);
       return res.status(400).json({
         success: false,
         error: 'No files were uploaded'
       });
     }
     
+    console.log('Files received in request:', Object.keys(req.files));
+    
     if (!req.files.audio) {
       console.log('Audio file not found in request');
       console.log('Available files:', Object.keys(req.files));
+      console.log('Request files content:', JSON.stringify(req.files, null, 2));
       return res.status(400).json({
         success: false,
         error: 'Please upload a file with the field name "audio"'
@@ -48,7 +54,7 @@ router.post('/', protect, async (req, res) => {
     }
     
     // Create a unique filename
-    const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.name)}`;
+    const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.name) || '.wav'}`;
     
     // Set upload path
     const uploadDir = path.join(__dirname, '../uploads');

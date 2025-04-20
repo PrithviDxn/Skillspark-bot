@@ -84,11 +84,50 @@ export const answerAPI = {
     question: string;
     audioUrl?: string;
     transcript?: string;
-  }) => api.post('/answers', answerData),
+    score?: number;
+    feedback?: string;
+    criteria?: {
+      technicalAccuracy: number;
+      completeness: number;
+      clarity: number;
+      examples: number;
+    };
+  }) => {
+    console.log('answerAPI.create called with data:', JSON.stringify(answerData, null, 2));
+    return api.post('/answers', answerData);
+  },
   update: (id: string, answerData: {
     score?: number;
     feedback?: string;
-  }) => api.put(`/answers/${id}`, answerData),
+    criteria?: {
+      technicalAccuracy: number;
+      completeness: number;
+      clarity: number;
+      examples: number;
+    };
+  }) => {
+    console.log('answerAPI.update called with id:', id);
+    console.log('answerAPI.update data:', JSON.stringify(answerData, null, 2));
+    
+    // Ensure criteria is properly structured if it exists
+    if (answerData.criteria) {
+      console.log('Criteria object present:', JSON.stringify(answerData.criteria, null, 2));
+      
+      // Ensure criteria object has all required fields
+      const criteriaObj = {
+        technicalAccuracy: answerData.criteria.technicalAccuracy || 0,
+        completeness: answerData.criteria.completeness || 0,
+        clarity: answerData.criteria.clarity || 0,
+        examples: answerData.criteria.examples || 0
+      };
+      
+      // Replace the original criteria with our sanitized version
+      answerData.criteria = criteriaObj;
+      console.log('Sanitized criteria:', JSON.stringify(criteriaObj, null, 2));
+    }
+    
+    return api.put(`/answers/${id}`, answerData);
+  },
 };
 
 // Upload endpoints
@@ -102,16 +141,22 @@ export const uploadAPI = {
     if (audioFile instanceof File) {
       formData.append('audio', audioFile);
     } else {
-      // If it's a Blob, convert to File with a name
-      formData.append('audio', new File([audioFile], 'recording.wav', { type: 'audio/wav' }));
+      // If it's a Blob, create a File with a proper name and MIME type
+      const fileExtension = audioFile.type?.includes('webm') ? '.webm' : '.wav';
+      const mimeType = audioFile.type || 'audio/wav';
+      formData.append('audio', new File([audioFile], `recording${fileExtension}`, { type: mimeType }));
     }
     
-    console.log('FormData created, sending request');
+    // Log the FormData entries for debugging
+    for (const pair of formData.entries()) {
+      console.log('FormData entry:', pair[0], pair[1]);
+    }
     
-    // Create a custom axios instance for file uploads with multipart/form-data content type
+    // Important: Don't set the Content-Type header manually when sending FormData
+    // Let the browser set the correct boundary value automatically
     return axios.post(`${BASE_URL}/uploads`, formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        // Removing explicit Content-Type - browser will set it correctly with boundary
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
     });

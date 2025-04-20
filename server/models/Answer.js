@@ -25,6 +25,32 @@ const AnswerSchema = new mongoose.Schema({
   feedback: {
     type: String
   },
+  criteria: {
+    technicalAccuracy: {
+      type: Number,
+      min: 0,
+      max: 10,
+      default: 0
+    },
+    completeness: {
+      type: Number,
+      min: 0,
+      max: 10,
+      default: 0
+    },
+    clarity: {
+      type: Number,
+      min: 0,
+      max: 10,
+      default: 0
+    },
+    examples: {
+      type: Number,
+      min: 0,
+      max: 10,
+      default: 0
+    }
+  },
   createdAt: {
     type: Date,
     default: Date.now

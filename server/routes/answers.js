@@ -123,13 +123,34 @@ router.post('/', protect, async (req, res) => {
       });
     }
     
+    // Log the incoming data including criteria if present
+    console.log('Creating new answer with data:', {
+      interview: req.body.interview,
+      question: req.body.question,
+      hasAudioUrl: !!req.body.audioUrl,
+      hasTranscript: !!req.body.transcript,
+      hasScore: req.body.score !== undefined,
+      hasFeedback: !!req.body.feedback,
+      hasCriteria: !!req.body.criteria,
+      criteriaData: req.body.criteria
+    });
+    
     const answer = await Answer.create(req.body);
+    
+    // Log the created answer to check if criteria was saved
+    console.log('New answer created:', {
+      id: answer._id,
+      hasScore: answer.score !== undefined,
+      hasCriteria: !!answer.criteria,
+      criteria: answer.criteria
+    });
 
     res.status(201).json({
       success: true,
       data: answer
     });
   } catch (err) {
+    console.error('Error creating answer:', err);
     res.status(400).json({
       success: false,
       error: err.message
@@ -157,14 +178,19 @@ router.put('/:id', protect, async (req, res) => {
     // For regular users, only allow updating if they are the interview candidate
     // For admins, only allow updating score and feedback
     if (req.user.role === 'admin') {
-      // Only allow admin to update score and feedback
-      const allowedUpdates = ['score', 'feedback'];
+      // Only allow admin to update score, feedback, and criteria
+      const allowedUpdates = ['score', 'feedback', 'criteria'];
       
       Object.keys(req.body).forEach(key => {
         if (!allowedUpdates.includes(key)) {
           delete req.body[key];
         }
       });
+
+      // Log what we're about to update if criteria is present
+      if (req.body.criteria) {
+        console.log('About to update answer with criteria:', JSON.stringify(req.body.criteria));
+      }
     } else {
       const candidateId = interview.candidate._id || interview.candidate;
       if (candidateId.toString() === req.user.id) {
@@ -184,9 +210,31 @@ router.put('/:id', protect, async (req, res) => {
       }
     }
 
-    answer = await Answer.findByIdAndUpdate(req.params.id, req.body, {
+    // Use a different approach to update criteria
+    const updateData = { ...req.body };
+    
+    // Extract criteria to set it separately
+    const criteriaData = updateData.criteria;
+    delete updateData.criteria;
+
+    // First update regular fields
+    answer = await Answer.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true
+    });
+
+    // If criteria data was provided, update it specifically
+    if (criteriaData) {
+      console.log('Setting criteria data directly:', JSON.stringify(criteriaData));
+      answer.criteria = criteriaData;
+      await answer.save();
+    }
+
+    // Log the updated answer to check if criteria was saved
+    console.log('Updated answer:', {
+      id: answer._id,
+      hasCriteria: !!answer.criteria,
+      criteria: answer.criteria
     });
 
     res.status(200).json({
@@ -220,6 +268,41 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
     res.status(200).json({
       success: true,
       data: {}
+    });
+  } catch (err) {
+    res.status(400).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+// @desc    Debug route to get raw answer data
+// @route   GET /api/v1/answers/debug/:id
+// @access  Private (Admin only)
+router.get('/debug/:id', protect, authorize('admin'), async (req, res) => {
+  try {
+    // Get the answer directly using findById without populate
+    const answer = await Answer.findById(req.params.id);
+    
+    if (!answer) {
+      return res.status(404).json({
+        success: false,
+        error: 'Answer not found'
+      });
+    }
+    
+    // Return the raw answer document with all fields
+    res.status(200).json({
+      success: true,
+      data: {
+        answer,
+        hasScore: answer.score !== undefined,
+        hasFeedback: answer.feedback !== undefined,
+        hasCriteria: answer.criteria !== undefined,
+        criteriaFields: answer.criteria ? Object.keys(answer.criteria) : [],
+        criteriaIsObject: answer.criteria ? typeof answer.criteria === 'object' : false
+      }
     });
   } catch (err) {
     res.status(400).json({

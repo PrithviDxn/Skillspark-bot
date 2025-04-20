@@ -100,6 +100,12 @@ export interface AnswerData {
 export interface AnswerUpdateData {
   score?: number;
   feedback?: string;
+  criteria?: {
+    technicalAccuracy: number;
+    completeness: number;
+    clarity: number;
+    examples: number;
+  };
 }
 
 // API response interfaces

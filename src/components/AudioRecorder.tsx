@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Check } from 'lucide-react';
+import { Mic, Square, Check, MicOff } from 'lucide-react';
 
 // Add SpeechRecognition types
 interface Window {
@@ -43,12 +43,13 @@ interface AudioRecorderProps {
 const AudioRecorder: React.FC<AudioRecorderProps> = ({ 
   onRecordingComplete, 
   isDisabled = false,
-  useSpeechRecognition = false
+  useSpeechRecognition = true
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioURL, setAudioURL] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string>('');
+  const [liveTranscript, setLiveTranscript] = useState<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
@@ -98,13 +99,35 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
           }
         }
         
-        // Update transcript
-        setTranscript(finalTranscript || interimTranscript);
+        // Update both transcripts
+        const fullTranscript = finalTranscript || interimTranscript;
+        setLiveTranscript(fullTranscript);
+        setTranscript((prev) => prev + ' ' + finalTranscript); // Only add final transcripts to the saved version
+        
+        // Emit transcript update event so parent components can show real-time transcript
+        const transcriptEvent = new CustomEvent('transcriptupdate', { 
+          detail: { text: fullTranscript, isFinal: !!finalTranscript }
+        });
+        document.dispatchEvent(transcriptEvent);
       };
       
       // Handle errors
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
+        
+        // If no speech detected, try to restart
+        if (event.error === 'no-speech' && isRecording) {
+          try {
+            recognitionRef.current?.stop();
+            setTimeout(() => {
+              if (isRecording && recognitionRef.current) {
+                recognitionRef.current.start();
+              }
+            }, 100);
+          } catch (e) {
+            console.error('Error restarting speech recognition:', e);
+          }
+        }
       };
       
       return true;
@@ -185,74 +208,42 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center space-y-4">
-      {isRecording ? (
-        <div className="flex flex-col items-center space-y-4">
-          <div className="record-pulse">
-            <div className="p-4 rounded-full bg-interview-danger text-white">
-              <Mic size={24} />
-            </div>
-          </div>
-          <div className="microphone-wave">
-            <div className="microphone-wave-bar"></div>
-            <div className="microphone-wave-bar"></div>
-            <div className="microphone-wave-bar"></div>
-            <div className="microphone-wave-bar"></div>
-            <div className="microphone-wave-bar"></div>
-          </div>
-          <div className="text-xl font-bold">{formatTime(recordingTime)}</div>
-          {useSpeechRecognition && transcript && (
-            <div className="mt-2 p-3 bg-gray-100 rounded-md w-full max-h-24 overflow-y-auto">
-              <p className="text-sm text-gray-600">{transcript}</p>
+    <div className="flex flex-col space-y-2">
+      <div className="flex items-center space-x-2">
+        <Button
+          onClick={isRecording ? stopRecording : startRecording}
+          disabled={isDisabled}
+          className={isRecording ? "bg-red-500 hover:bg-red-600" : ""}
+        >
+          {isRecording ? (
+            <>
+              <MicOff className="mr-2 h-4 w-4" /> Stop ({formatTime(recordingTime)})
+            </>
+          ) : (
+            <>
+              <Mic className="mr-2 h-4 w-4" /> Record Answer
+            </>
+          )}
+        </Button>
+        
+        {audioURL && (
+          <audio src={audioURL} controls className="w-full" />
+        )}
+      </div>
+      
+      {useSpeechRecognition && (
+        <div className="text-sm">
+          {isRecording && liveTranscript && (
+            <div className="p-2 bg-gray-50 rounded border">
+              <p className="font-medium text-xs mb-1 text-gray-500">Live Transcription:</p>
+              <p className="italic text-gray-700">{liveTranscript}</p>
             </div>
           )}
-          <Button 
-            variant="destructive" 
-            onClick={stopRecording}
-            className="flex items-center space-x-2"
-          >
-            <Square size={16} />
-            <span>Stop Recording</span>
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center space-y-4">
-          {audioURL ? (
-            <div className="flex flex-col items-center space-y-4 w-full">
-              <div className="p-4 rounded-full bg-interview-success text-white">
-                <Check size={24} />
-              </div>
-              <p className="text-sm text-gray-500">Recording complete</p>
-              <audio src={audioURL} controls className="w-full" />
-              {useSpeechRecognition && transcript && (
-                <div className="mt-2 p-3 bg-gray-100 rounded-md w-full">
-                  <h4 className="text-sm font-medium mb-1">Transcript:</h4>
-                  <p className="text-sm">{transcript}</p>
-                </div>
-              )}
-              <Button 
-                onClick={startRecording} 
-                disabled={isDisabled}
-                className="flex items-center space-x-2"
-              >
-                <Mic size={16} />
-                <span>Record Again</span>
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center space-y-4">
-              <div className="p-4 rounded-full bg-gray-200 text-gray-700">
-                <Mic size={24} />
-              </div>
-              <p className="text-sm text-gray-500">Click to start recording</p>
-              <Button 
-                onClick={startRecording} 
-                disabled={isDisabled}
-                className="flex items-center space-x-2"
-              >
-                <Mic size={16} />
-                <span>Start Recording</span>
-              </Button>
+          
+          {transcript && !isRecording && (
+            <div className="p-2 bg-gray-100 rounded border">
+              <p className="font-medium text-xs mb-1 text-gray-600">Transcription:</p>
+              <p className="text-gray-800">{transcript}</p>
             </div>
           )}
         </div>

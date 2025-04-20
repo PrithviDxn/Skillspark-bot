@@ -73,7 +73,12 @@ app.use(fileUpload({
   tempFileDir: path.join(__dirname, 'tmp'),
   createParentPath: true,
   debug: true,
-  abortOnLimit: true
+  abortOnLimit: true,
+  parseNested: true, // Enable parsing of nested objects
+  safeFileNames: true, // Replace special characters in filenames
+  preserveExtension: true, // Keep file extensions
+  uploadTimeout: 60000, // 60 seconds timeout
+  uriDecodeFileNames: true // Decode URI encoded filenames
 }));
 
 // Enable CORS
