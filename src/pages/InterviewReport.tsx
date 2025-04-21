@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { useInterview, Question, Interview as InterviewType, Answer } from '@/context/InterviewContext';
+import { useInterview, Question, Interview as InterviewType } from '@/context/InterviewContext';
+import { answerAPI } from '@/api';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,49 @@ import {
   ResponsiveContainer,
   Tooltip
 } from 'recharts';
+import { toast } from 'sonner';
+
+// Define QuestionObject interface for embedded question data
+interface QuestionObject {
+  _id: string;
+  text: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  // @ts-ignore - We need to allow additional properties
+  [key: string]: any;
+}
+
+// Add interface for API answer data
+interface ApiAnswer {
+  _id: string;
+  question: string;
+  interview: string;
+  audioUrl?: string;
+  transcript?: string;
+  score?: number;
+  feedback?: string;
+  criteria?: {
+    technicalAccuracy: number;
+    completeness: number;
+    clarity: number;
+    examples: number;
+  };
+}
+
+// Extended Answer interface to handle questionId either as string or object
+interface Answer {
+  id: string;
+  questionId: string | QuestionObject;
+  audioUrl?: string;
+  transcript?: string;
+  score?: number;
+  feedback?: string;
+  criteria?: {
+    technicalAccuracy: number;
+    completeness: number;
+    clarity: number;
+    examples: number;
+  };
+}
 
 type QuestionWithAnswer = {
   question: Question;
@@ -27,6 +71,30 @@ interface RadarChartData {
   score: number;
   fullMark: number;
 }
+
+// Add a function to properly format audio URLs
+const getFullAudioUrl = (relativeUrl?: string): string | undefined => {
+  if (!relativeUrl) return undefined;
+  
+  // If it's already an absolute URL, return it as is
+  if (relativeUrl.startsWith('http')) {
+    return relativeUrl;
+  }
+  
+  // Otherwise, prepend the API base URL
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+  // Remove '/api/v1' from the base URL if it exists
+  const baseApiUrl = baseUrl.endsWith('/api/v1') 
+    ? baseUrl.substring(0, baseUrl.length - 7) 
+    : baseUrl;
+  
+  // Ensure the relative URL starts with a slash
+  const formattedPath = relativeUrl.startsWith('/') 
+    ? relativeUrl 
+    : `/${relativeUrl}`;
+  
+  return `${baseApiUrl}${formattedPath}`;
+};
 
 const InterviewReport: React.FC = () => {
   const { reportId } = useParams<{ reportId: string }>();
@@ -67,46 +135,146 @@ const InterviewReport: React.FC = () => {
         
         // Debug answers
         console.log('Found interview answers:', foundInterview.answers);
+        console.log('Answer details:',
+          foundInterview.answers.map(a => ({
+            id: a.id,
+            questionId: a.questionId,
+            hasTranscript: !!a.transcript,
+            transcriptLength: a.transcript ? a.transcript.length : 0
+          }))
+        );
+
+        // If we have no answers, try to refresh the interview data one more time
+        if (foundInterview.answers.length === 0) {
+          console.log('No answers found, attempting to refresh interview data');
+          // Do a forced refresh by calling the API directly
+          try {
+            console.log('Fetching answers for empty interview');
+            const answersResponse = await answerAPI.getByInterview(reportId);
+            
+            if (answersResponse.data && answersResponse.data.data && answersResponse.data.data.length > 0) {
+              console.log('Found answers directly from API:', answersResponse.data.data.length);
+              // Update the interview with the found answers
+              const freshAnswers = answersResponse.data.data.map((answer: ApiAnswer) => ({
+                id: answer._id,
+                questionId: answer.question,
+                audioUrl: answer.audioUrl,
+                transcript: answer.transcript,
+                score: answer.score,
+                feedback: answer.feedback,
+                criteria: answer.criteria
+              }));
+              
+              foundInterview = {
+                ...foundInterview,
+                answers: freshAnswers
+              };
+              
+              console.log('Updated interview with fresh answers:', freshAnswers.length);
+            } else {
+              console.log('No answers found from direct API call');
+            }
+          } catch (err) {
+            console.error('Error fetching answers directly:', err);
+          }
+          
+          // Still refresh through context to keep everything in sync
+          const refreshedInterview = await refreshInterview(reportId);
+          if (refreshedInterview && refreshedInterview.answers.length > 0) {
+            foundInterview = refreshedInterview;
+            console.log('Refreshed interview with answers:', foundInterview.answers);
+          }
+        }
 
         let qaMap: QuestionWithAnswer[] = [];
         
         // First check if we have any questions from the tech stack
         if (questions && questions.length > 0) {
-          // Utility function to determine if question and answer match
+          // Updated method with proper type checking for the questionId comparison
           const isMatchingQuestionAndAnswer = (question: Question, answer: Answer) => {
-            // Method 1: Direct ID match
-            if (answer.questionId === question.id) {
+            // Get the actual questionId whether it's a string or an object with _id property
+            let actualQuestionId: string;
+            
+            if (typeof answer.questionId === 'object' && answer.questionId) {
+              const questionObj = answer.questionId as QuestionObject;
+              actualQuestionId = questionObj._id;
+            } else {
+              actualQuestionId = answer.questionId as string;
+            }
+            
+            // Log the comparison attempt for debugging
+            console.log(`Comparing question ${question.id} with answer.questionId ${actualQuestionId}`);
+            
+            // Method 1: Direct ID match (most reliable)
+            if (actualQuestionId === question.id) {
+              console.log(`✅ Direct ID match found for question ${question.id}`);
               return true;
             }
             
-            // Method 2: Substring match in either direction
-            if (answer.questionId.includes(question.id) || question.id.includes(answer.questionId)) {
-              return true;
+            // Method 2: If IDs are MongoDb ObjectIds, they might be stringified differently
+            // So check if one contains the other
+            if (typeof actualQuestionId === 'string' && typeof question.id === 'string') {
+              if ((actualQuestionId.includes(question.id) || question.id.includes(actualQuestionId)) && 
+                  (actualQuestionId.length > 10 || question.id.length > 10)) { // Only for longer IDs which are likely DB IDs
+                console.log(`✅ Substring ID match found: question ${question.id} - answer ${actualQuestionId}`);
+                return true;
+              }
             }
             
-            // Method 3: Match by question text (if there's only one question with this exact text)
+            // Method 3: Check if answer.questionId is an object with text property and compare directly
+            if (typeof answer.questionId === 'object' && answer.questionId) {
+              const questionObj = answer.questionId as QuestionObject;
+              if (questionObj.text === question.text) {
+                console.log(`✅ Direct text match found for question ${question.id}`);
+                return true;
+              }
+            }
+            
+            // Method 4: If tech stack had only one question with this text, it's likely the same
+            // This is a fallback for cases where IDs don't match at all
             const normalizedQuestionText = question.text.toLowerCase().trim();
             const matchingQuestionsWithSameText = questions.filter(q => 
               q.text.toLowerCase().trim() === normalizedQuestionText
             );
             
             if (matchingQuestionsWithSameText.length === 1) {
-              console.log(`Only one question with text "${question.text.substring(0, 20)}..." - assuming match`);
+              console.log(`✅ Single question text match for: "${question.text.substring(0, 20)}..."`);
               return true;
             }
             
+            console.log(`❌ No match for question ${question.id} - answer ${JSON.stringify(actualQuestionId)}`);
             return false;
           };
         
         // Map questions to their answers
           qaMap = questions.map(question => {
-            // Find a matching answer for this question
+            // Find a matching answer for this question - but don't reuse answers that are already matched
+            // Keep track of already mapped answers to prevent duplicates
+            const alreadyMappedAnswerIds = qaMap.map(q => q.answer?.id).filter(Boolean);
+            
+            // Find matching answer, but exclude already mapped ones
             const matchingAnswer = foundInterview.answers.find(answer => 
+              !alreadyMappedAnswerIds.includes(answer.id) && 
               isMatchingQuestionAndAnswer(question, answer)
             );
             
+            // Add more detailed logging
             console.log(`Question ${question.id} (${question.text.substring(0, 20)}...) -> Answer:`, 
-              matchingAnswer ? `FOUND (id: ${matchingAnswer.id})` : 'NOT FOUND');
+              matchingAnswer ? `FOUND (id: ${matchingAnswer.id}, hasAudio: ${!!matchingAnswer.audioUrl}, hasTranscript: ${!!matchingAnswer.transcript})` : 'NOT FOUND');
+            
+            // Additional debug logging for answer content
+            if (matchingAnswer) {
+              console.log('Full answer data:', JSON.stringify({
+                id: matchingAnswer.id,
+                questionId: matchingAnswer.questionId,
+                audioUrl: matchingAnswer.audioUrl,
+                fullAudioUrl: getFullAudioUrl(matchingAnswer.audioUrl),
+                transcriptLength: matchingAnswer.transcript ? matchingAnswer.transcript.length : 0,
+                score: matchingAnswer.score,
+                hasFeedback: !!matchingAnswer.feedback,
+                hasCriteria: !!matchingAnswer.criteria
+              }, null, 2));
+            }
             
             return {
           question,
@@ -124,7 +292,28 @@ const InterviewReport: React.FC = () => {
             await refreshQuestions(foundInterview.stackId);
             
             qaMap = foundInterview.answers.map(answer => {
-              // Log complete answer data for debugging
+              // Extract question info if embedded in the answer
+              if (typeof answer.questionId === 'object' && answer.questionId) {
+                console.log('Found embedded question in answer:', answer.questionId);
+                
+                // Cast to QuestionObject type for TypeScript
+                const questionObj = answer.questionId as QuestionObject;
+                
+                // Create question from embedded data
+                const placeholder: Question = {
+                  id: questionObj._id || `placeholder-${Date.now()}`,
+                  stackId: foundInterview.stackId,
+                  text: questionObj.text,
+                  difficulty: questionObj.difficulty || 'medium'
+                };
+                
+                return {
+                  question: placeholder,
+                  answer: answer
+                };
+              }
+
+              // Original fallback code for finding questions
               console.log('Full answer data for placeholder question:', answer);
               
               // Try to find the original question from any tech stack
@@ -132,7 +321,16 @@ const InterviewReport: React.FC = () => {
                 .flatMap(stack => getQuestionsForStack(stack.id));
                 
               // First look for exact match by ID
-              const matchingQuestion = allQuestions.find(q => q.id === answer.questionId);
+              let actualQuestionId: string;
+              
+              if (typeof answer.questionId === 'object' && answer.questionId) {
+                const questionObj = answer.questionId as QuestionObject;
+                actualQuestionId = questionObj._id;
+              } else {
+                actualQuestionId = answer.questionId as string;
+              }
+              
+              const matchingQuestion = allQuestions.find(q => q.id === actualQuestionId);
               if (matchingQuestion) {
                 console.log('Found matching question in stack:', matchingQuestion);
                 return {
@@ -142,16 +340,18 @@ const InterviewReport: React.FC = () => {
               }
               
               // Next try substring match (some databases store IDs differently)
-              const substringMatchQuestion = allQuestions.find(q => 
-                q.id.includes(answer.questionId) || answer.questionId.includes(q.id)
-              );
-              
-              if (substringMatchQuestion) {
-                console.log('Found substring matching question:', substringMatchQuestion);
-                return {
-                  question: substringMatchQuestion,
-                  answer: answer
-                };
+              if (typeof actualQuestionId === 'string') {
+                const substringMatchQuestion = allQuestions.find(q => 
+                  (typeof q.id === 'string') && (q.id.includes(actualQuestionId) || actualQuestionId.includes(q.id))
+                );
+                
+                if (substringMatchQuestion) {
+                  console.log('Found substring matching question:', substringMatchQuestion);
+                  return {
+                    question: substringMatchQuestion,
+                    answer: answer
+                  };
+                }
               }
               
               // Create a placeholder with a default question
@@ -161,7 +361,7 @@ const InterviewReport: React.FC = () => {
               
               // Create a placeholder question based on the answer
               const placeholder: Question = {
-                id: answer.questionId || `placeholder-${Date.now()}`,
+                id: typeof answer.questionId === 'string' ? answer.questionId : `placeholder-${Date.now()}`,
                 stackId: foundInterview.stackId,
                 text: questionText,
                 difficulty: 'medium'
@@ -325,6 +525,258 @@ const InterviewReport: React.FC = () => {
     ? availableTechStacks.find(stack => stack.id === interview.stackId)
     : null;
   
+  // Update the fetchAnswerDirectly function to pull the necessary data and properly parse it
+  const fetchAnswerDirectly = async (answerId: string) => {
+    try {
+      toast.info("Fetching answer data directly...");
+      
+      // Check if the answer already has detailed data
+      console.log("Current answer in state:", 
+        interview.answers.find(a => a.id === answerId));
+      
+      // Use the answerAPI to get the specific answer by ID
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/answers/${answerId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        console.error("Error fetching answer:", response.status, response.statusText);
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
+        toast.error("Failed to fetch answer details");
+        return;
+      }
+      
+      const data = await response.json();
+      console.log("Fetched answer directly:", data);
+      
+      if (data.success && data.data) {
+        const answer = data.data;
+        
+        // Create a properly formatted answer object
+        const formattedAnswer = {
+          id: answer._id,
+          questionId: answer.question,
+          audioUrl: answer.audioUrl,
+          transcript: answer.transcript,
+          score: answer.score,
+          feedback: answer.feedback,
+          criteria: answer.criteria
+        };
+        
+        console.log("Formatted answer data:", formattedAnswer);
+        
+        // Update the interview in state with the fetched answer data
+        setInterview(prev => {
+          if (!prev) return prev;
+          
+          // Replace the answer with our newly fetched data
+          const updatedAnswers = prev.answers.map(a => 
+            a.id === answerId ? formattedAnswer : a
+          );
+          
+          return {
+            ...prev,
+            answers: updatedAnswers
+          };
+        });
+        
+        // Also update questionsWithAnswers to ensure the UI reflects the new data
+        setQuestionsWithAnswers(prev => {
+          return prev.map(qa => {
+            if (qa.answer && qa.answer.id === answerId) {
+              return {
+                ...qa,
+                answer: formattedAnswer
+              };
+            }
+            return qa;
+          });
+        });
+        
+        toast.success("Answer data refreshed - please check if audio and transcript are now visible");
+      } else {
+        toast.error("Failed to fetch answer or invalid data format");
+      }
+    } catch (error) {
+      console.error("Error fetching answer:", error);
+      toast.error("Failed to fetch answer details");
+    }
+  };
+  
+  // Add a new section at the top of the debug information for a direct database check
+  // Update the debug information section
+  const forceCompleteReload = async () => {
+    try {
+      toast.info("Force reloading all data and bypassing mock transcript...");
+      
+      // Step 1: Fetch the interview details directly
+      const token = localStorage.getItem('token');
+      
+      // Step 2: Fetch all answers for this interview directly - this is the key step
+      const answersResponse = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/answers?interview=${reportId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      if (!answersResponse.ok) {
+        console.error("Error fetching answers:", answersResponse.status);
+        toast.error("Failed to fetch answers data");
+        return;
+      }
+      
+      const answersData = await answersResponse.json();
+      console.log("DIRECT DB ANSWERS:", answersData);
+      
+      if (!answersData.success || !answersData.data) {
+        toast.error("Invalid answers data format");
+        return;
+      }
+      
+      const apiAnswers = answersData.data;
+      
+      // Step 3: Manually update the transcript and other data for each answer
+      if (apiAnswers && apiAnswers.length > 0) {
+        setInterview(prev => {
+          if (!prev) return prev;
+          
+          const updatedAnswers = prev.answers.map((prevAnswer, index) => {
+            // Find the corresponding answer in the API data
+            const apiAnswer = apiAnswers.find(a => a._id === prevAnswer.id);
+            
+            if (apiAnswer) {
+              console.log(`Updating answer ${prevAnswer.id} with direct DB data`);
+              console.log("Original transcript:", prevAnswer.transcript?.substring(0, 30));
+              console.log("DB transcript:", apiAnswer.transcript?.substring(0, 30));
+              
+              return {
+                ...prevAnswer,
+                transcript: apiAnswer.transcript || prevAnswer.transcript,
+                audioUrl: apiAnswer.audioUrl || prevAnswer.audioUrl,
+                score: apiAnswer.score || prevAnswer.score,
+                feedback: apiAnswer.feedback || prevAnswer.feedback,
+                criteria: apiAnswer.criteria || prevAnswer.criteria
+              };
+            }
+            
+            return prevAnswer;
+          });
+          
+          return {
+            ...prev,
+            answers: updatedAnswers
+          };
+        });
+        
+        // Also update the QA mapping to ensure the UI reflects the changes
+        setQuestionsWithAnswers(prev => {
+          return prev.map(qa => {
+            if (qa.answer) {
+              // Find the corresponding answer in the API data
+              const apiAnswer = apiAnswers.find(a => a._id === qa.answer?.id);
+              
+              if (apiAnswer) {
+                return {
+                  ...qa,
+                  answer: {
+                    ...qa.answer,
+                    transcript: apiAnswer.transcript || qa.answer.transcript,
+                    audioUrl: apiAnswer.audioUrl || qa.answer.audioUrl,
+                    score: apiAnswer.score || qa.answer.score,
+                    feedback: apiAnswer.feedback || qa.answer.feedback,
+                    criteria: apiAnswer.criteria || qa.answer.criteria
+                  }
+                };
+              }
+            }
+            
+            return qa;
+          });
+        });
+        
+        toast.success("Direct database data loaded successfully");
+      }
+    } catch (error) {
+      console.error("Error in force reload:", error);
+      toast.error("Failed to reload data");
+    }
+  };
+  
+  // Replace the existing transcript refresh function with a more focused one
+  const reloadAnswerTranscript = async (answerId: string) => {
+    try {
+      toast.info("Bypassing mock transcript and fetching real data...");
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/answers/${answerId}`, 
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        console.error("Error fetching answer:", response.status);
+        toast.error("Failed to fetch answer transcript");
+        return;
+      }
+      
+      const data = await response.json();
+      console.log("DIRECT DB ANSWER:", data);
+      
+      if (!data.success || !data.data) {
+        toast.error("Invalid answer data format");
+        return;
+      }
+      
+      const apiAnswer = data.data;
+      
+      // Check if this is a mock transcript by comparing to known mock responses
+      const mockC = "C's preprocessor directives li";
+      
+      if (apiAnswer.transcript?.startsWith(mockC)) {
+        toast.error("WARNING: Database contains mock transcript. Real transcript may be missing.");
+      }
+      
+      // Force update the transcript from the raw database record
+      setQuestionsWithAnswers(prev => 
+        prev.map(qa => 
+          qa.answer?.id === answerId 
+            ? { 
+                ...qa, 
+                answer: { 
+                  ...qa.answer, 
+                  transcript: apiAnswer.transcript,
+                  audioUrl: apiAnswer.audioUrl,
+                  score: apiAnswer.score,
+                  feedback: apiAnswer.feedback,
+                  criteria: apiAnswer.criteria
+                } 
+              } 
+            : qa
+        )
+      );
+      
+      toast.success("Raw transcript data loaded directly from database");
+    } catch (error) {
+      console.error("Error fetching transcript:", error);
+      toast.error("Failed to fetch transcript data");
+    }
+  };
+  
   if (!user || user.role !== 'admin') {
     return (
       <Layout>
@@ -418,8 +870,8 @@ const InterviewReport: React.FC = () => {
             <Button variant="outline" size="sm" onClick={refreshData}>
               <RefreshCw size={16} className="mr-1" /> Refresh Data
             </Button>
-            <Button variant="default" size="sm" onClick={loadInterviewData}>
-              Force Reload
+            <Button variant="default" size="sm" onClick={forceCompleteReload}>
+              Force Complete Reload
           </Button>
           </div>
         </div>
@@ -431,6 +883,50 @@ const InterviewReport: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium">Direct Database Check</h3>
+                  <div className="flex gap-2 mt-1">
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      onClick={() => {
+                        const answerId = interview.answers[0]?.id;
+                        if (answerId) {
+                          // Skip the mock transcription by directly fetching from database
+                          fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/answers/${answerId}`, {
+                            headers: {
+                              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                              'Content-Type': 'application/json',
+                            }
+                          })
+                          .then(response => response.json())
+                          .then(data => {
+                            console.log("DIRECT DB DATA:", data);
+                            if (data.success && data.data) {
+                              // Show the raw server data in an alert
+                              const answer = data.data;
+                              alert(
+                                `DIRECT DATABASE DATA:\n\n` +
+                                `ID: ${answer._id}\n` +
+                                `Question: ${answer.question}\n` +
+                                `Audio URL: ${answer.audioUrl}\n` +
+                                `Transcript: ${answer.transcript?.substring(0, 100)}...\n` +
+                                `Score: ${answer.score}\n`
+                              );
+                            }
+                          })
+                          .catch(error => {
+                            console.error("Error checking database:", error);
+                            toast.error("Failed to check database record");
+                          });
+                        }
+                      }}
+                    >
+                      Check DB Directly
+                    </Button>
+                  </div>
+                </div>
+                
                 <div>
                   <h3 className="text-sm font-medium">Interview ID: {interview.id}</h3>
                   <p className="text-xs">Stack ID: {interview.stackId}</p>
@@ -484,6 +980,36 @@ const InterviewReport: React.FC = () => {
                       answerId: qa.answer?.id
                     })), null, 2)}
                   </pre>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium">Full Answer Data:</h3>
+                  <pre className="text-xs bg-gray-100 p-2 overflow-auto max-h-32">
+                    {JSON.stringify(interview.answers.map(a => ({
+                      id: a.id,
+                      questionId: typeof a.questionId === 'object' ? a.questionId._id : a.questionId,
+                      audioUrl: a.audioUrl,
+                      transcript: a.transcript ? `${a.transcript.substring(0, 30)}...` : null,
+                      score: a.score,
+                      feedback: a.feedback ? `${a.feedback.substring(0, 30)}...` : null
+                    })), null, 2)}
+                  </pre>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium">Answer Debug Tools:</h3>
+                  <div className="flex gap-2 mt-1">
+                    {interview.answers.map(answer => (
+                      <Button 
+                        key={answer.id} 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => fetchAnswerDirectly(answer.id)}
+                      >
+                        Fetch Answer {answer.id.substring(0, 6)}...
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -632,18 +1158,50 @@ const InterviewReport: React.FC = () => {
                         <Info size={16} className="mr-1" /> Audio Response
                     </h4>
                     {answer.audioUrl ? (
-                      <audio src={answer.audioUrl} controls className="w-full" />
+                      <div>
+                        <audio 
+                          src={getFullAudioUrl(answer.audioUrl)} 
+                          controls 
+                          className="w-full" 
+                          onError={(e) => console.error("Audio error:", e)}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Audio URL: {getFullAudioUrl(answer.audioUrl)}
+                        </p>
+                      </div>
                     ) : (
-                      <p className="text-sm text-gray-500">Audio not available</p>
+                      <p className="text-sm text-gray-500">
+                        Audio not available - URL: {answer.audioUrl ?? "No URL provided"}
+                      </p>
                     )}
                   </div>
                   
                   <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
                         <Info size={16} className="mr-1" /> Transcript
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="ml-2 h-7 text-xs"
+                          onClick={() => reloadAnswerTranscript(answer.id)}
+                        >
+                          Refresh Transcript
+                        </Button>
                     </h4>
                       <div className="p-4 bg-gray-50 rounded-lg text-sm">
-                      {answer.transcript || 'No transcript available'}
+                        {answer.transcript ? (
+                          <>
+                            <p>{answer.transcript}</p>
+                            <p className="text-xs text-gray-500 mt-2">
+                              Transcript length: {answer.transcript.length} characters
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-gray-500">
+                            No transcript available. Check if transcript is loaded correctly: 
+                            {JSON.stringify({hasAnswer: !!answer, hasTranscript: !!answer.transcript})}
+                          </p>
+                        )}
                     </div>
                   </div>
                   
@@ -700,3 +1258,4 @@ const InterviewReport: React.FC = () => {
 };
 
 export default InterviewReport;
+

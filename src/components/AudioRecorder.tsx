@@ -1,13 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Check, MicOff } from 'lucide-react';
+import { Mic, Square, Check, AlertCircle } from 'lucide-react';
 
-// Add SpeechRecognition types
-interface Window {
-  webkitSpeechRecognition: any;
-  SpeechRecognition: any;
-}
-
+// Define SpeechRecognition types
 interface SpeechRecognitionEvent {
   resultIndex: number;
   results: {
@@ -34,6 +29,36 @@ interface SpeechRecognition extends EventTarget {
   onerror: (event: SpeechRecognitionErrorEvent) => void;
 }
 
+interface SpeechRecognitionConstructor {
+  new(): SpeechRecognition;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
+// Function to detect if text is likely a mock transcript
+const isMockTranscript = (text: string): boolean => {
+  if (!text) return false;
+  
+  // Common mock transcript starting phrases
+  const mockPhrases = [
+    "C is a procedural programming",
+    "JavaScript is a high-level",
+    "Python is a high-level",
+    "Java is a high-level",
+    "React is a JavaScript",
+    "Node.js is an open-source",
+    "TypeScript is a strongly typed",
+  ];
+  
+  // Check if transcript starts with any of the mock phrases
+  return mockPhrases.some(phrase => text.trim().startsWith(phrase));
+};
+
 interface AudioRecorderProps {
   onRecordingComplete: (blob: Blob, transcript?: string) => void;
   isDisabled?: boolean;
@@ -43,13 +68,15 @@ interface AudioRecorderProps {
 const AudioRecorder: React.FC<AudioRecorderProps> = ({ 
   onRecordingComplete, 
   isDisabled = false,
-  useSpeechRecognition = true
+  useSpeechRecognition = false
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioURL, setAudioURL] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string>('');
-  const [liveTranscript, setLiveTranscript] = useState<string>('');
+  const [interimTranscript, setInterimTranscript] = useState<string>('');
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
@@ -73,74 +100,96 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
   // Initialize speech recognition
   const initSpeechRecognition = () => {
-    if (!useSpeechRecognition) return;
+    if (!useSpeechRecognition) return false;
     
     // Check if browser supports speech recognition
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognitionAPI = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-      recognitionRef.current = new SpeechRecognitionAPI();
-      
-      // Configure speech recognition
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
-      
-      // Handle results
-      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognitionAPI) {
+        recognitionRef.current = new SpeechRecognitionAPI();
         
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
-          }
-        }
+        // Configure speech recognition
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
+        recognitionRef.current.lang = 'en-US';
         
-        // Update both transcripts
-        const fullTranscript = finalTranscript || interimTranscript;
-        setLiveTranscript(fullTranscript);
-        setTranscript((prev) => prev + ' ' + finalTranscript); // Only add final transcripts to the saved version
-        
-        // Emit transcript update event so parent components can show real-time transcript
-        const transcriptEvent = new CustomEvent('transcriptupdate', { 
-          detail: { text: fullTranscript, isFinal: !!finalTranscript }
-        });
-        document.dispatchEvent(transcriptEvent);
-      };
-      
-      // Handle errors
-      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error('Speech recognition error:', event.error);
-        
-        // If no speech detected, try to restart
-        if (event.error === 'no-speech' && isRecording) {
-          try {
-            recognitionRef.current?.stop();
-            setTimeout(() => {
-              if (isRecording && recognitionRef.current) {
-                recognitionRef.current.start();
+        // Handle results
+        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+          let currentInterimTranscript = '';
+          let finalTranscriptUpdate = '';
+          
+          // Use a more type-safe way to iterate through results
+          const resultLength = Object.keys(event.results).length;
+          for (let i = event.resultIndex; i < resultLength; i++) {
+            // Ensure the result exists
+            if (event.results[i]) {
+              const transcriptText = event.results[i][0]?.transcript || '';
+              if (event.results[i].isFinal) {
+                finalTranscriptUpdate += transcriptText + ' ';
+                
+                // Add to full transcript
+                setTranscript(prevTranscript => 
+                  prevTranscript ? `${prevTranscript.trim()} ${transcriptText.trim()}` : transcriptText.trim()
+                );
+                
+                // Reset interim transcript
+                setInterimTranscript('');
+                
+                // Dispatch custom event for final transcript update
+                document.dispatchEvent(new CustomEvent('transcriptupdate', {
+                  detail: { 
+                    text: transcriptText.trim(),
+                    isFinal: true
+                  }
+                }));
+              } else {
+                currentInterimTranscript += transcriptText;
               }
-            }, 100);
-          } catch (e) {
-            console.error('Error restarting speech recognition:', e);
+            }
           }
-        }
-      };
-      
-      return true;
-    } else {
-      console.warn('Speech recognition not supported in this browser');
-      return false;
+          
+          // Only update interim transcript if it changed
+          if (currentInterimTranscript) {
+            setInterimTranscript(currentInterimTranscript);
+            
+            // Dispatch custom event for interim transcript update
+            document.dispatchEvent(new CustomEvent('transcriptupdate', {
+              detail: { 
+                text: currentInterimTranscript,
+                isFinal: false
+              }
+            }));
+          }
+
+          // Log transcript updates for debugging
+          if (finalTranscriptUpdate) {
+            console.log('Final transcript update:', finalTranscriptUpdate);
+          }
+          if (currentInterimTranscript) {
+            console.log('Interim transcript:', currentInterimTranscript);
+          }
+        };
+        
+        // Handle errors
+        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+          console.error('Speech recognition error:', event.error);
+          setIsTranscribing(false);
+        };
+        
+        setIsTranscribing(true);
+        return true;
+      }
     }
+    
+    console.warn('Speech recognition not supported in this browser');
+    return false;
   };
 
   const startRecording = async () => {
     audioChunksRef.current = [];
     setAudioURL(null);
     setTranscript('');
+    setInterimTranscript('');
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -151,9 +200,12 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       };
       
       mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(audioBlob);
         setAudioURL(url);
+        
+        // Pass both the audio blob and transcript to the parent component
+        console.log('Recording complete. Transcript:', transcript);
         onRecordingComplete(audioBlob, transcript);
       };
       
@@ -196,7 +248,12 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       
       // Stop speech recognition if enabled
       if (useSpeechRecognition && recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+          setIsTranscribing(false);
+        } catch (error) {
+          console.error('Error stopping speech recognition:', error);
+        }
       }
     }
   };
@@ -208,42 +265,100 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   };
 
   return (
-    <div className="flex flex-col space-y-2">
-      <div className="flex items-center space-x-2">
-        <Button
-          onClick={isRecording ? stopRecording : startRecording}
-          disabled={isDisabled}
-          className={isRecording ? "bg-red-500 hover:bg-red-600" : ""}
-        >
-          {isRecording ? (
-            <>
-              <MicOff className="mr-2 h-4 w-4" /> Stop ({formatTime(recordingTime)})
-            </>
-          ) : (
-            <>
-              <Mic className="mr-2 h-4 w-4" /> Record Answer
-            </>
-          )}
-        </Button>
-        
-        {audioURL && (
-          <audio src={audioURL} controls className="w-full" />
-        )}
-      </div>
-      
-      {useSpeechRecognition && (
-        <div className="text-sm">
-          {isRecording && liveTranscript && (
-            <div className="p-2 bg-gray-50 rounded border">
-              <p className="font-medium text-xs mb-1 text-gray-500">Live Transcription:</p>
-              <p className="italic text-gray-700">{liveTranscript}</p>
+    <div className="flex flex-col items-center space-y-4">
+      {isRecording ? (
+        <div className="flex flex-col items-center space-y-4">
+          <div className="record-pulse">
+            <div className="p-4 rounded-full bg-interview-danger text-white">
+              <Mic size={24} />
+            </div>
+          </div>
+          <div className="microphone-wave">
+            <div className="microphone-wave-bar"></div>
+            <div className="microphone-wave-bar"></div>
+            <div className="microphone-wave-bar"></div>
+            <div className="microphone-wave-bar"></div>
+            <div className="microphone-wave-bar"></div>
+          </div>
+          <div className="text-xl font-bold">{formatTime(recordingTime)}</div>
+          {useSpeechRecognition && (
+            <div className="mt-2 p-3 bg-gray-100 rounded-md w-full max-h-24 overflow-y-auto">
+              {transcript && (
+                <div className="mb-2">
+                  <p className="text-sm text-gray-600 font-semibold">Transcript:</p>
+                  <p className="text-sm text-gray-800">{transcript}</p>
+                  {isMockTranscript(transcript) && (
+                    <div className="mt-1 flex items-center text-interview-danger text-xs p-1 bg-red-50 rounded">
+                      <AlertCircle size={12} className="mr-1" />
+                      <span>Warning: This appears to be a mock transcript. Real speech may not be properly transcribed.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {interimTranscript && (
+                <div>
+                  <p className="text-sm text-gray-600 font-semibold">Currently speaking:</p>
+                  <p className="text-sm text-gray-500 italic">{interimTranscript}</p>
+                </div>
+              )}
+              {isTranscribing && !transcript && !interimTranscript && (
+                <p className="text-sm text-gray-500 italic">Waiting for speech...</p>
+              )}
             </div>
           )}
-          
-          {transcript && !isRecording && (
-            <div className="p-2 bg-gray-100 rounded border">
-              <p className="font-medium text-xs mb-1 text-gray-600">Transcription:</p>
-              <p className="text-gray-800">{transcript}</p>
+          <Button 
+            variant="destructive" 
+            onClick={stopRecording}
+            className="flex items-center space-x-2"
+          >
+            <Square size={16} />
+            <span>Stop Recording</span>
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center space-y-4">
+          {audioURL ? (
+            <div className="flex flex-col items-center space-y-4 w-full">
+              <div className="p-4 rounded-full bg-interview-success text-white">
+                <Check size={24} />
+              </div>
+              <p className="text-sm text-gray-500">Recording complete</p>
+              <audio src={audioURL} controls className="w-full" />
+              {useSpeechRecognition && transcript && (
+                <div className="mt-2 p-3 bg-gray-100 rounded-md w-full">
+                  <h4 className="text-sm font-medium mb-1">Transcript:</h4>
+                  <p className="text-sm">{transcript}</p>
+                  {isMockTranscript(transcript) && (
+                    <div className="mt-1 flex items-center text-interview-danger text-xs p-1 bg-red-50 rounded">
+                      <AlertCircle size={12} className="mr-1" />
+                      <span>Warning: This appears to be a mock transcript. Real speech may not be properly transcribed.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <Button 
+                onClick={startRecording} 
+                disabled={isDisabled}
+                className="flex items-center space-x-2"
+              >
+                <Mic size={16} />
+                <span>Record Again</span>
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center space-y-4">
+              <div className="p-4 rounded-full bg-gray-200 text-gray-700">
+                <Mic size={24} />
+              </div>
+              <p className="text-sm text-gray-500">Click to start recording</p>
+              <Button 
+                onClick={startRecording} 
+                disabled={isDisabled}
+                className="flex items-center space-x-2"
+              >
+                <Mic size={16} />
+                <span>Start Recording</span>
+              </Button>
             </div>
           )}
         </div>

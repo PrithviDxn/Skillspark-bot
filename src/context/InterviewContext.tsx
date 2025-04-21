@@ -1,8 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, FC, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { techStackAPI, questionAPI, aiAPI, interviewAPI, answerAPI, uploadAPI } from '@/api';
 import freeEvaluationService from '@/services/FreeEvaluationService';
-import { v4 as uuidv4 } from 'uuid';
 
 // Types
 export type TechStack = {
@@ -53,7 +52,7 @@ type InterviewContextType = {
   startInterview: (candidateId: string, stackId: string) => Promise<Interview>;
   endInterview: (interviewId: string) => Promise<void>;
   getQuestionsForStack: (stackId: string) => Question[];
-  saveAnswer: (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string) => Promise<Answer | undefined>;
+  saveAnswer: (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string) => Promise<void>;
   getInterviewDetails: (interviewId: string) => Interview | null;
   refreshInterview: (interviewId: string) => Promise<Interview | null>;
   isLoading: boolean;
@@ -223,7 +222,7 @@ const mockQuestions: Record<string, Question[]> = {
 };
 
 // Create the context
-export const InterviewContext = createContext<InterviewContextType | undefined>(undefined);
+const InterviewContext = createContext<InterviewContextType | undefined>(undefined);
 
 // Mock transcription function (in a real app this would use Whisper API)
 const mockTranscribe = async (audioBlob: Blob, techStack?: string): Promise<string> => {
@@ -366,7 +365,7 @@ interface ApiAnswer {
   };
 }
 
-export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => {
+export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentInterview, setCurrentInterview] = useState<Interview | null>(null);
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -485,14 +484,18 @@ export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const saveAnswer = async (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string): Promise<Answer | undefined> => {
+  const saveAnswer = async (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string): Promise<void> => {
     setIsLoading(true);
+    
     try {
       // Get the interview
       const interview = interviews.find(i => i.id === interviewId);
       if (!interview) {
         throw new Error('Interview not found');
       }
+      
+      // Create object URL for the audio blob
+      const audioUrl = URL.createObjectURL(audioBlob);
       
       // Find the question and tech stack
       const stackId = interview.stackId;
@@ -508,36 +511,36 @@ export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => 
         throw new Error('Question not found');
       }
       
-      // Use the provided transcript if available (from speech recognition)
       let finalTranscript = transcript;
       let score, feedback, criteria;
+      let usedMockTranscript = false; // Flag to track if mock transcript was used
       
-      // If no transcript was provided
+      // Get the transcription
       if (!finalTranscript) {
-        if (useFreeMode) {
-          // Free mode - use mock transcribe as fallback
-          try {
-            // Pass the tech stack name to get appropriate mock responses
+        try {
+          if (useFreeMode) {
+            // In free mode, still use mock transcribe but mark it clearly
             finalTranscript = await mockTranscribe(audioBlob, stack?.name);
-          } catch (error) {
-            console.error('Transcription error:', error);
-            finalTranscript = "Unable to transcribe audio";
-          }
-        } else {
-          // Paid mode - Use Whisper API
-          try {
+            usedMockTranscript = true; // Set the flag
+            finalTranscript = `[MOCK TRANSCRIPT] ${finalTranscript}`;
+            console.log('Using mock transcript (free mode):', finalTranscript.substring(0, 30));
+          } else {
+            // In paid mode, always use the real transcription API
             const transcriptionResponse = await aiAPI.transcribe(audioBlob);
             finalTranscript = transcriptionResponse.data.data;
             
             if (!finalTranscript) {
               throw new Error('Transcription failed');
             }
-          } catch (error) {
-            console.error('Transcription error:', error);
-            toast.error('Transcription failed, using backup method');
-            // Fallback to mock transcription in case of failure
-            finalTranscript = await mockTranscribe(audioBlob, stack?.name);
+            console.log('Real transcript obtained:', finalTranscript.substring(0, 30));
           }
+        } catch (error) {
+          console.error('Transcription error:', error);
+          
+          // IMPORTANT CHANGE: Don't fall back to mock transcription
+          // Instead, set a clear error message as the transcript
+          finalTranscript = "[TRANSCRIPTION FAILED] Unable to transcribe audio. Please check audio quality or try again.";
+          toast.error('Transcription failed. Check error logs for details.');
         }
       }
       
@@ -545,7 +548,7 @@ export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => 
       const wordCount = finalTranscript.trim().split(/\s+/).length;
       console.log(`Answer word count: ${wordCount} for question: ${question.text.substring(0, 30)}...`);
       
-      if (wordCount < 5) {
+      if (wordCount < 5 && !finalTranscript.includes('[TRANSCRIPTION FAILED]')) {
         toast.warning('Your answer is too short or incomplete. Please provide a more detailed response.');
       }
       
@@ -562,10 +565,16 @@ export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => 
         feedback = evaluation.feedback;
         criteria = evaluation.criteria;
         
+        // Add note about mock transcript if applicable
+        if (usedMockTranscript) {
+          feedback = `[USING MOCK DATA] ${feedback}\n\nNote: This evaluation is based on auto-generated mock data, not your actual response.`;
+        }
+        
         toast.success('Answer evaluated using local AI');
       } else {
         // Paid mode - Use OpenAI services
         try {
+          // Skip to evaluation - we already handled transcription above
           const evaluationResponse = await aiAPI.evaluate({
             question: question.text,
             transcript: finalTranscript,
@@ -586,7 +595,7 @@ export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => 
           // Fallback to mock evaluation in case of failure
           const mockEval = await mockEvaluateAnswer(question.text, finalTranscript);
           score = mockEval.score;
-          feedback = mockEval.feedback;
+          feedback = `[MOCK EVALUATION] ${mockEval.feedback}\n\nNote: This is an auto-generated mock evaluation because the AI evaluation service failed.`;
         }
       }
       
@@ -594,7 +603,7 @@ export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => 
       const answer: Answer = {
         id: Date.now().toString(),
         questionId,
-        audioUrl: '',  // will be updated after upload
+        audioUrl,
         transcript: finalTranscript,
         score,
         feedback,
@@ -629,9 +638,6 @@ export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => 
         // Extract the file URL from the response
         const serverAudioUrl = uploadResponse.data.data.fileUrl;
         console.log('File uploaded successfully with URL:', serverAudioUrl);
-        
-        // Update the answer with the server audioUrl
-        answer.audioUrl = serverAudioUrl;
         
         // Ensure we have properly formatted criteria
         const formattedCriteria = criteria ? {
@@ -684,7 +690,6 @@ export const InterviewProvider: FC<{ children: ReactNode }> = ({ children }) => 
       }
       
       toast.success('Answer saved!');
-      return answer;
     } catch (error) {
       console.error('Failed to save answer:', error);
       toast.error('Failed to save answer');

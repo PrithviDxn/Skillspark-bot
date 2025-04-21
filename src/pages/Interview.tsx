@@ -43,24 +43,6 @@ const Interview: React.FC = () => {
   const timerRef = useRef<number | null>(null);
   const autoSubmitRef = useRef<number | null>(null);
 
-  const [currentTranscript, setCurrentTranscript] = useState<string>('');
-  
-  // Listen for transcript updates from AudioRecorder
-  useEffect(() => {
-    const handleTranscriptUpdate = (event: CustomEvent) => {
-      const { text, isFinal } = event.detail;
-      setCurrentTranscript(text);
-    };
-    
-    // Add event listener
-    document.addEventListener('transcriptupdate', handleTranscriptUpdate as EventListener);
-    
-    // Cleanup
-    return () => {
-      document.removeEventListener('transcriptupdate', handleTranscriptUpdate as EventListener);
-    };
-  }, []);
-
   useEffect(() => {
     // Find the interview if we don't have it in state
     if (!currentInterview && interviewId) {
@@ -141,41 +123,54 @@ const Interview: React.FC = () => {
 
   const currentQuestion = questions[currentQuestionIndex];
   
-  const handleAnswerSubmit = async (audioBlob: Blob, transcript?: string) => {
+  const handleRecordingComplete = async (audioBlob: Blob, transcript?: string) => {
     if (!currentInterview || !currentQuestion) return;
     
     setIsSubmitting(true);
     
     try {
-      // Use the actual transcript captured during recording
+      // Stop the timer
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      
       await saveAnswer(currentInterview.id, currentQuestion.id, audioBlob, transcript);
       
-      // Add this question to answered questions
+      // Mark question as answered
       setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
       
-      // Clear current transcript for the next question
-      setCurrentTranscript('');
-      
-      // Move to next question if available
-      if (currentQuestionIndex < questions.length - 1) {
-        setCurrentQuestionIndex(prev => prev + 1);
-      } else {
+      // If it's the last question, show completion
+      if (currentQuestionIndex === questions.length - 1) {
         setShowComplete(true);
+      } else {
+        // Otherwise move to the next question
+        setCurrentQuestionIndex(prev => prev + 1);
       }
       
       setIsAnswering(false);
+      setHasTimerStarted(false);
     } catch (error) {
-      console.error('Error saving answer:', error);
-      toast.error('Failed to save your answer. Please try again.');
+      console.error('Failed to save answer:', error);
+      toast.error('Failed to save answer. Please try again.');
     } finally {
       setIsSubmitting(false);
-      setHasTimerStarted(false);
     }
   };
 
   const handleStartAnswering = () => {
+    // Ensure time is reset when starting to answer
+    setTimeRemaining(MAX_QUESTION_TIME);
+    
     setIsAnswering(true);
     setHasTimerStarted(true);
+    
+    const handleTimeUp = () => {
+      // When time is up, show a message and don't auto-submit
+      toast.warning("Time's up! Your answer was not recorded. You can try again or navigate to another question.");
+      setIsAnswering(false);
+      setHasTimerStarted(false);
+    };
     
     // Start the timer
     timerRef.current = window.setInterval(() => {
@@ -201,12 +196,12 @@ const Interview: React.FC = () => {
             setAutoSubmitCountdown(prev => {
               const newCount = prev - 1;
               if (newCount <= 0) {
-                // Time's up - auto skip
+                // Time's up - call our new handler instead of auto-skip
                 if (autoSubmitRef.current) {
                   window.clearInterval(autoSubmitRef.current);
                   autoSubmitRef.current = null;
                 }
-                handleSkipQuestion();
+                handleTimeUp();
                 return 0;
               }
               return newCount;
@@ -273,9 +268,46 @@ const Interview: React.FC = () => {
   // Calculate progress percentage
   const progressPercentage = (answeredQuestions.size / questions.length) * 100;
 
+  // First, find where we handle transcription during recording and add a mock warning
+  useEffect(() => {
+    if (autoSubmitCountdown > 0 && autoSubmitCountdown <= 5) {
+      const timer = setTimeout(() => {
+        setAutoSubmitCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (autoSubmitCountdown === 0 && isAnswering) {
+      // Only execute this if timer has actually run out (timeRemaining === 0)
+      // This check prevents the immediate auto-submit when starting to answer
+      if (timeRemaining === 0) {
+        handleRecordingComplete(new Blob(), '');
+      }
+    }
+  }, [autoSubmitCountdown, isAnswering, timeRemaining, handleRecordingComplete]);
+
+  // Add a function to detect mock transcripts
+  const isMockTranscript = (text?: string): boolean => {
+    if (!text) return false;
+    
+    // Check for our explicit mock markers
+    if (text.includes('[MOCK TRANSCRIPT]')) return true;
+    
+    // Also check for common phrases from mock transcripts
+    const mockPhrases = [
+      "C is a procedural programming",
+      "React's virtual DOM is",
+      "Node.js uses an event-driven",
+      "Generators in Python are",
+      "In Java, an interface defines",
+      "Closures in JavaScript occur",
+      "Memory management in C is"
+    ];
+    
+    return mockPhrases.some(phrase => text.includes(phrase));
+  };
+
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4">
+      <div className="max-w-3xl mx-auto">
         {showComplete ? (
           <Card>
             <CardContent className="p-8 text-center">
@@ -292,80 +324,103 @@ const Interview: React.FC = () => {
           </Card>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className={`px-3 py-1 rounded-full text-xs font-medium 
-                  ${currentQuestion?.difficulty === 'easy' ? 'bg-green-100 text-green-800' : 
-                    currentQuestion?.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' : 
-                    'bg-red-100 text-red-800'}`}
-                >
-                  {currentQuestion?.difficulty?.toUpperCase() || 'MEDIUM'}
-                </div>
-                
-                {hasTimerStarted && (
-                  <div className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium
-                    ${timerWarning ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}
-                  >
-                    <Clock size={12} />
-                    <span>{formatTime(timeRemaining)}</span>
-                  </div>
-                )}
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-lg font-medium">Question {currentQuestionIndex + 1} of {questions.length}</h2>
+                <span className="text-sm text-gray-500">
+                  {answeredQuestions.size} answered
+                </span>
               </div>
-              
-              <div className="text-sm text-gray-500">
-                Question {currentQuestionIndex + 1} of {questions.length}
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-interview-primary rounded-full" 
+                  style={{ width: `${progressPercentage}%` }}
+                ></div>
               </div>
             </div>
             
-            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
-              <div 
-                className="bg-blue-600 h-2.5 rounded-full" 
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">{currentQuestion?.text || 'Loading question...'}</h2>
-              
-              {isAnswering ? (
-                <div className="space-y-4">
-                  <AudioRecorder 
-                    onRecordingComplete={handleAnswerSubmit} 
-                    isDisabled={isSubmitting}
-                    useSpeechRecognition={true}
-                  />
-                  
-                  {currentTranscript && (
-                    <div className="mt-4 p-3 bg-blue-50 rounded-md">
-                      <p className="text-sm font-medium text-blue-700 mb-1">Live Transcript:</p>
-                      <p className="text-sm text-gray-700">{currentTranscript}</p>
+            <Card className="shadow-md">
+              <CardContent className="p-6">
+                <div className="mb-4">
+                  {hasTimerStarted && (
+                    <div className={`flex items-center ${timeRemaining <= 30 ? 'text-red-500' : 'text-gray-500'} mb-4 justify-end`}>
+                      <Clock size={18} className="mr-2" />
+                      <span className="font-mono font-medium">{formatTime(timeRemaining)}</span>
                     </div>
                   )}
                   
-                  <div className="flex justify-between mt-4">
-                    <Button 
-                      variant="outline" 
-                      onClick={handleSkipQuestion}
-                      disabled={isSubmitting}
-                    >
-                      Skip Question
-                    </Button>
+                  {autoSubmitCountdown > 0 && (
+                    <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4 flex items-center">
+                      <AlertCircle size={20} className="mr-2" />
+                      <span>Time's up! Moving to next question in {autoSubmitCountdown} seconds...</span>
+                    </div>
+                  )}
+                
+                  <div className="flex items-center mb-2">
+                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full mr-2 text-xs font-medium ${getDifficultyColor(currentQuestion?.difficulty || 'medium')}`}>
+                      {getDifficultyInitial(currentQuestion?.difficulty || 'medium')}
+                    </span>
+                    <span className="text-sm font-medium text-gray-500">
+                      {currentQuestion?.difficulty?.toUpperCase() || 'MEDIUM'} 
+                    </span>
                   </div>
+                  
+                  <h3 className="text-xl font-medium mb-6">
+                    {currentQuestion?.text || 'Loading question...'}
+                  </h3>
                 </div>
-              ) : (
-                <div>
-                  <Button 
-                    onClick={() => {
-                      setIsAnswering(true);
-                      setHasTimerStarted(true);
-                      handleStartAnswering();
-                    }}
-                    className="w-full"
-                  >
-                    Start Answering
-                  </Button>
-                </div>
-              )}
+                
+                {isAnswering ? (
+                  <div className="mt-6">
+                    <AudioRecorder 
+                      onRecordingComplete={handleRecordingComplete} 
+                      isDisabled={isSubmitting}
+                      useSpeechRecognition={useFreeMode}
+                    />
+                    <div className="mt-4 flex justify-between">
+                      <Button 
+                        variant="outline" 
+                        onClick={handleSkipQuestion}
+                        disabled={isSubmitting}
+                      >
+                        Skip Question
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-6">
+                    <Button onClick={handleStartAnswering} className="w-full">
+                      Answer This Question
+                    </Button>
+                    <div className="mt-4 text-center">
+                      <button
+                        onClick={handleSkipQuestion}
+                        className="text-sm text-gray-500 hover:text-gray-900"
+                      >
+                        Skip to next question
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            <div className="mt-6 flex justify-between">
+              <Button 
+                variant="outline" 
+                onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+                disabled={currentQuestionIndex === 0 || isAnswering}
+              >
+                Previous Question
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setCurrentQuestionIndex(prev => Math.min(questions.length - 1, prev + 1))}
+                disabled={currentQuestionIndex === questions.length - 1 || isAnswering}
+              >
+                Next Question
+                <ArrowRight size={16} className="ml-2" />
+              </Button>
             </div>
           </>
         )}
