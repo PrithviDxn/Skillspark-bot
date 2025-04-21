@@ -28,14 +28,43 @@ interface AdminUser {
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
   const { availableTechStacks, interviews, getQuestionsForStack } = useInterview();
-  const [activeTab, setActiveTab] = useState<'interviews' | 'techStacks' | 'users' | 'browse'>('interviews');
+  const [activeTab, setActiveTab] = useState<'interviews' | 'techStacks' | 'users' | 'browse' | 'reports'>('interviews');
   const [selectedStack, setSelectedStack] = useState<string>('');
   const [selectedStackForBrowse, setSelectedStackForBrowse] = useState<string | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [isLoadingAdmins, setIsLoadingAdmins] = useState(false);
   
+  // Add sorting states
+  const [pendingSortBy, setPendingSortBy] = useState<'date' | 'stack' | 'status'>('date');
+  const [completedSortBy, setCompletedSortBy] = useState<'date' | 'stack'>('date');
+  
   const completedInterviews = interviews.filter(interview => interview.status === 'completed');
   const pendingInterviews = interviews.filter(interview => interview.status !== 'completed');
+
+  // Sort interviews based on criteria
+  const sortedPendingInterviews = [...pendingInterviews].sort((a, b) => {
+    if (pendingSortBy === 'date') {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // Most recent first
+    } else if (pendingSortBy === 'stack') {
+      const stackA = availableTechStacks.find(stack => stack.id === a.stackId)?.name || '';
+      const stackB = availableTechStacks.find(stack => stack.id === b.stackId)?.name || '';
+      return stackA.localeCompare(stackB);
+    } else { // status
+      return a.status.localeCompare(b.status);
+    }
+  });
+
+  const sortedCompletedInterviews = [...completedInterviews].sort((a, b) => {
+    if (completedSortBy === 'date') {
+      const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+      const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+      return dateB - dateA; // Most recent first
+    } else { // stack
+      const stackA = availableTechStacks.find(stack => stack.id === a.stackId)?.name || '';
+      const stackB = availableTechStacks.find(stack => stack.id === b.stackId)?.name || '';
+      return stackA.localeCompare(stackB);
+    }
+  });
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -196,6 +225,16 @@ const AdminDashboard: React.FC = () => {
           </button>
           <button
             className={`px-4 py-2 font-medium ${
+              activeTab === 'reports'
+                ? 'text-interview-primary border-b-2 border-interview-primary'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            onClick={() => setActiveTab('reports')}
+          >
+            Reports
+          </button>
+          <button
+            className={`px-4 py-2 font-medium ${
               activeTab === 'techStacks'
                 ? 'text-interview-primary border-b-2 border-interview-primary'
                 : 'text-gray-600 hover:text-gray-900'
@@ -229,19 +268,34 @@ const AdminDashboard: React.FC = () => {
       
       {activeTab === 'interviews' ? (
         <div className="space-y-6">
-          <InterviewScheduler />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <InterviewScheduler />
+            </div>
+            
             <Card>
-              <CardHeader>
-                <CardTitle>Pending Interviews</CardTitle>
-                <CardDescription>
-                  Interviews that are scheduled or in progress
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Pending Interviews</CardTitle>
+                  <CardDescription>
+                    Interviews that are scheduled or in progress
+                  </CardDescription>
+                </div>
+                <Select value={pendingSortBy} onValueChange={(value: 'date' | 'stack' | 'status') => setPendingSortBy(value)}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date">Sort by Date</SelectItem>
+                    <SelectItem value="stack">Sort by Tech Stack</SelectItem>
+                    <SelectItem value="status">Sort by Status</SelectItem>
+                  </SelectContent>
+                </Select>
               </CardHeader>
               <CardContent>
-                {pendingInterviews.length > 0 ? (
-                  <div className="space-y-4">
-                    {pendingInterviews.map(interview => {
+                {sortedPendingInterviews.length > 0 ? (
+                  <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
+                    {sortedPendingInterviews.map(interview => {
                       const techStack = availableTechStacks.find(
                         stack => stack.id === interview.stackId
                       );
@@ -282,59 +336,72 @@ const AdminDashboard: React.FC = () => {
                 )}
               </CardContent>
             </Card>
-            
-            <Card>
-              <CardHeader>
+          </div>
+        </div>
+      ) : activeTab === 'reports' ? (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
                 <CardTitle>Completed Interviews</CardTitle>
                 <CardDescription>
                   Interviews that have been completed and evaluated
                 </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {completedInterviews.length > 0 ? (
-                  <div className="space-y-4">
-                    {completedInterviews.map(interview => {
-                      const techStack = availableTechStacks.find(
-                        stack => stack.id === interview.stackId
-                      );
-                      
-                      return (
-                        <div 
-                          key={interview.id} 
-                          className="p-4 border rounded-md flex justify-between items-center"
-                        >
-                          <div>
-                            <p className="font-medium">
-                              {techStack?.name || 'Unknown'} Interview
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              Completed: {interview.completedAt ? new Date(interview.completedAt).toLocaleString() : 'Unknown'}
-                            </p>
-                            <div className="mt-1">
-                              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                                completed
-                              </span>
-                            </div>
+              </div>
+              <Select value={completedSortBy} onValueChange={(value: 'date' | 'stack') => setCompletedSortBy(value)}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date">Sort by Date</SelectItem>
+                  <SelectItem value="stack">Sort by Tech Stack</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            <CardContent>
+              {sortedCompletedInterviews.length > 0 ? (
+                <div className="space-y-4">
+                  {sortedCompletedInterviews.map(interview => {
+                    const techStack = availableTechStacks.find(
+                      stack => stack.id === interview.stackId
+                    );
+                    
+                    return (
+                      <div 
+                        key={interview.id} 
+                        className="p-4 border rounded-md flex justify-between items-center"
+                      >
+                        <div>
+                          <p className="font-medium">
+                            {techStack?.name || 'Unknown'} Interview
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Completed: {interview.completedAt ? new Date(interview.completedAt).toLocaleString() : 'Unknown'}
+                          </p>
+                          <div className="mt-1">
+                            <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                              completed
+                            </span>
                           </div>
-                          <Button variant="outline" size="sm" asChild>
-                            <Link to={`/admin/report/${interview.id}`}>
-                              View Report
-                            </Link>
-                          </Button>
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <ClipboardCheck className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-semibold">No completed interviews</h3>
-                    <p className="mt-1 text-sm">Completed interviews will appear here</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link to={`/admin/report/${interview.id}`}>
+                            View Report
+                          </Link>
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <ClipboardCheck className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-semibold">No completed interviews</h3>
+                  <p className="mt-1 text-sm">Completed interviews will appear here</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       ) : activeTab === 'techStacks' ? (
         <div className="space-y-6">
