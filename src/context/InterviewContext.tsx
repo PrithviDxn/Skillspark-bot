@@ -445,12 +445,16 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsLoading(true);
     
     try {
+      // Use current date/time in proper format
+      const now = new Date();
+      const scheduledDate = now.toISOString(); // full ISO string
+      const scheduledTime = now.toTimeString().substring(0, 5); // "HH:MM"
       // Call the actual API instead of simulating
       const response = await interviewAPI.create({
         candidate: candidateId,
         techStack: stackId,
-        scheduledDate: new Date().toISOString().split('T')[0],
-        scheduledTime: new Date().toISOString().split('T')[1].substring(0, 5),
+        scheduledDate,
+        scheduledTime,
         duration: 30
       });
       

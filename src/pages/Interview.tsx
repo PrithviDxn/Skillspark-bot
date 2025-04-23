@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { answerAPI, uploadAPI, aiAPI } from '@/api';
 import { useInterview, Question } from '@/context/InterviewContext';
 import Layout from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,6 +32,8 @@ const Interview: React.FC = () => {
   const [isAnswering, setIsAnswering] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
+// Store all answers locally for batch submission
+const [localAnswers, setLocalAnswers] = useState<any[]>([]);
   const [showComplete, setShowComplete] = useState(false);
   
   // New states for enhanced features
@@ -125,34 +128,37 @@ const Interview: React.FC = () => {
   
   const handleRecordingComplete = async (audioBlob: Blob, transcript?: string) => {
     if (!currentInterview || !currentQuestion) return;
-    
     setIsSubmitting(true);
-    
     try {
       // Stop the timer
       if (timerRef.current) {
         window.clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      
-      await saveAnswer(currentInterview.id, currentQuestion.id, audioBlob, transcript);
-      
-      // Mark question as answered
+      // Prepare answer object for local storage
+      const answerObj = {
+        interview: currentInterview.id,
+        questionId: currentQuestion.id,
+        audioBlob,
+        transcript,
+        questionText: currentQuestion.text
+      };
+      setLocalAnswers(prev => {
+        // Replace if already exists for this question
+        const filtered = prev.filter(a => a.questionId !== currentQuestion.id);
+        return [...filtered, answerObj];
+      });
       setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
-      
-      // If it's the last question, show completion
       if (currentQuestionIndex === questions.length - 1) {
         setShowComplete(true);
       } else {
-        // Otherwise move to the next question
         setCurrentQuestionIndex(prev => prev + 1);
       }
-      
       setIsAnswering(false);
       setHasTimerStarted(false);
     } catch (error) {
-      console.error('Failed to save answer:', error);
-      toast.error('Failed to save answer. Please try again.');
+      console.error('Failed to store answer:', error);
+      toast.error('Failed to store answer locally. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -216,21 +222,73 @@ const Interview: React.FC = () => {
 
   const handleFinishInterview = async () => {
     if (!currentInterview) return;
-    
     setIsSubmitting(true);
-    
     try {
+      // Prepare answers for batch submission
+      const batchAnswers = [];
+      for (const local of localAnswers) {
+        // 1. Upload audio
+        let audioUrl = undefined;
+        if (local.audioBlob) {
+          try {
+            const uploadRes = await uploadAPI.uploadAudio(local.audioBlob);
+            audioUrl = uploadRes.data?.url || uploadRes.data?.audioUrl;
+          } catch (err) {
+            console.error('Audio upload failed:', err);
+            toast.error('Audio upload failed for one of your answers.');
+          }
+        }
+        // 2. Transcribe
+        let transcript = local.transcript;
+        if (!transcript && local.audioBlob) {
+          try {
+            const transRes = await aiAPI.transcribe(local.audioBlob);
+            transcript = transRes.data?.data;
+          } catch (err) {
+            transcript = '[TRANSCRIPTION FAILED]';
+            console.error('Transcription failed:', err);
+          }
+        }
+        // 3. Evaluate
+        let score, feedback, criteria;
+        if (transcript && local.questionText) {
+          try {
+            const evalRes = await aiAPI.evaluate({
+              question: local.questionText,
+              transcript,
+              techStack: (currentInterview.stackName || questions[0]?.techStack || undefined)
+            });
+            if (evalRes.data?.data) {
+              score = evalRes.data.data.score;
+              feedback = evalRes.data.data.feedback;
+              criteria = evalRes.data.data.criteria;
+            }
+          } catch (err) {
+            console.error('Evaluation failed:', err);
+          }
+        }
+        batchAnswers.push({
+          interview: currentInterview.id,
+          question: local.questionId,
+          audioUrl,
+          transcript,
+          score,
+          feedback,
+          criteria
+        });
+      }
+      if (batchAnswers.length > 0) {
+        await answerAPI.batch(batchAnswers);
+      }
       await endInterview(currentInterview.id);
-      
       toast.success('Interview submitted successfully!');
-      
       if (user.role === 'admin') {
         navigate(`/admin/report/${currentInterview.id}`);
       } else {
         navigate('/');
       }
     } catch (error) {
-      console.error('Failed to end interview:', error);
+      console.error('Failed to submit answers/interview:', error);
       toast.error('Failed to submit interview. Please try again.');
     } finally {
       setIsSubmitting(false);

@@ -63,7 +63,7 @@ import aiRoutes from './routes/ai.js';
 
 const app = express();
 
-// Body parser
+// Parse JSON bodies
 app.use(express.json());
 
 // File upload middleware

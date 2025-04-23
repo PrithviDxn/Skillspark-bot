@@ -128,6 +128,23 @@ export const answerAPI = {
     
     return api.put(`/answers/${id}`, answerData);
   },
+  batch: (answers: Array<{
+    interview: string;
+    question: string;
+    audioUrl?: string;
+    transcript?: string;
+    score?: number;
+    feedback?: string;
+    criteria?: {
+      technicalAccuracy: number;
+      completeness: number;
+      clarity: number;
+      examples: number;
+    };
+  }>) => {
+    console.log('answerAPI.batch called with answers:', JSON.stringify(answers, null, 2));
+    return api.post('/answers/batch', answers);
+  },
 };
 
 // Upload endpoints

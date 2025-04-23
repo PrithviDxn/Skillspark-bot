@@ -6,7 +6,7 @@ import { answerAPI } from '@/api';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, Clock, User, Download, CheckCircle, XCircle, Info, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, User, Download, CheckCircle, XCircle, Info, RefreshCw, ChevronLeft } from 'lucide-react';
 import {
   Radar,
   RadarChart,
@@ -23,8 +23,6 @@ interface QuestionObject {
   _id: string;
   text: string;
   difficulty?: 'easy' | 'medium' | 'hard';
-  // @ts-ignore - We need to allow additional properties
-  [key: string]: any;
 }
 
 // Add interface for API answer data
@@ -777,6 +775,14 @@ const InterviewReport: React.FC = () => {
     }
   };
   
+  // Fix handleBack function
+  const handleBack = () => {
+    // Set active tab to 'reports' in localStorage
+    localStorage.setItem('adminActiveTab', 'reports');
+    // Navigate back to dashboard using react-router
+    navigate('/admin/dashboard');
+  };
+  
   if (!user || user.role !== 'admin') {
     return (
       <Layout>
@@ -827,14 +833,17 @@ const InterviewReport: React.FC = () => {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
-        <Button 
-          variant="outline" 
-          onClick={() => navigate('/admin/dashboard')}
-          className="mb-6"
-        >
-          <ArrowLeft size={16} className="mr-2" />
-          Back to Dashboard
-        </Button>
+        <div className="flex items-center mb-6">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="mr-4"
+            onClick={handleBack}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" /> Back
+          </Button>
+          <h1 className="text-2xl font-bold">Interview Report</h1>
+        </div>
         
         <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
           <div>
@@ -987,7 +996,9 @@ const InterviewReport: React.FC = () => {
                   <pre className="text-xs bg-gray-100 p-2 overflow-auto max-h-32">
                     {JSON.stringify(interview.answers.map(a => ({
                       id: a.id,
-                      questionId: typeof a.questionId === 'object' ? a.questionId._id : a.questionId,
+                      questionId: typeof a.questionId === 'object' && a.questionId 
+                        ? (a.questionId as QuestionObject)._id 
+                        : a.questionId,
                       audioUrl: a.audioUrl,
                       transcript: a.transcript ? `${a.transcript.substring(0, 30)}...` : null,
                       score: a.score,

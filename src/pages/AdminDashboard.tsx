@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useInterview } from '@/context/InterviewContext';
 import { useAuth } from '@/context/AuthContext';
 import Layout from '@/components/Layout';
@@ -28,43 +28,87 @@ interface AdminUser {
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
   const { availableTechStacks, interviews, getQuestionsForStack } = useInterview();
-  const [activeTab, setActiveTab] = useState<'interviews' | 'techStacks' | 'users' | 'browse' | 'reports'>('interviews');
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedStack, setSelectedStack] = useState<string>('');
   const [selectedStackForBrowse, setSelectedStackForBrowse] = useState<string | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [isLoadingAdmins, setIsLoadingAdmins] = useState(false);
   
   // Add sorting states
-  const [pendingSortBy, setPendingSortBy] = useState<'date' | 'stack' | 'status'>('date');
-  const [completedSortBy, setCompletedSortBy] = useState<'date' | 'stack'>('date');
+  const [pendingSortBy, setPendingSortBy] = useState<'nearest' | 'stack' | 'status'>('nearest');
+  const [completedSortBy, setCompletedSortBy] = useState<'recent' | 'stack'>('recent');
+  // Separate filter states for pending and completed interviews
+  const [pendingMonthFilter, setPendingMonthFilter] = useState<string>('all');
+  const [completedMonthFilter, setCompletedMonthFilter] = useState<string>('all');
   
   const completedInterviews = interviews.filter(interview => interview.status === 'completed');
   const pendingInterviews = interviews.filter(interview => interview.status !== 'completed');
 
-  // Sort interviews based on criteria
-  const sortedPendingInterviews = [...pendingInterviews].sort((a, b) => {
-    if (pendingSortBy === 'date') {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // Most recent first
-    } else if (pendingSortBy === 'stack') {
-      const stackA = availableTechStacks.find(stack => stack.id === a.stackId)?.name || '';
-      const stackB = availableTechStacks.find(stack => stack.id === b.stackId)?.name || '';
-      return stackA.localeCompare(stackB);
-    } else { // status
-      return a.status.localeCompare(b.status);
+  // Check for stored active tab in localStorage
+  useEffect(() => {
+    const savedTab = localStorage.getItem('adminActiveTab');
+    if (savedTab) {
+      setActiveTab(savedTab);
+      localStorage.removeItem('adminActiveTab'); // Remove it after using
     }
-  });
+  }, []);
 
-  const sortedCompletedInterviews = [...completedInterviews].sort((a, b) => {
-    if (completedSortBy === 'date') {
-      const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-      const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
-      return dateB - dateA; // Most recent first
-    } else { // stack
-      const stackA = availableTechStacks.find(stack => stack.id === a.stackId)?.name || '';
-      const stackB = availableTechStacks.find(stack => stack.id === b.stackId)?.name || '';
-      return stackA.localeCompare(stackB);
+  // Save active tab to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('adminActiveTab', activeTab);
+  }, [activeTab]);
+
+  // Get current month in YYYY-MM format for default filter
+  const getCurrentMonth = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  // Generate last 12 months for filtering
+  const getLast12Months = () => {
+    const months = [];
+    const now = new Date();
+    
+    for (let i = 0; i < 12; i++) {
+      const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthString = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+      const monthDisplay = month.toLocaleString('default', { month: 'long', year: 'numeric' });
+      months.push({ value: monthString, label: monthDisplay });
     }
-  });
+    
+    return months;
+  };
+  
+  // Filter pending interviews by month
+  const filteredPendingInterviews = useMemo(() => {
+    if (pendingMonthFilter === 'all') return pendingInterviews;
+    
+    return pendingInterviews.filter((interview) => {
+      const interviewDate = new Date(interview.scheduledFor);
+      const month = interviewDate.getMonth() + 1; // JS months are 0-indexed
+      return month.toString() === pendingMonthFilter;
+    });
+  }, [pendingInterviews, pendingMonthFilter]);
+  
+  // Filter completed interviews by month
+  const filteredCompletedInterviews = useMemo(() => {
+    if (completedMonthFilter === 'all') return completedInterviews;
+    
+    return completedInterviews.filter((interview) => {
+      const interviewDate = new Date(interview.completedAt || interview.scheduledFor);
+      const month = interviewDate.getMonth() + 1; // JS months are 0-indexed
+      return month.toString() === completedMonthFilter;
+    });
+  }, [completedInterviews, completedMonthFilter]);
+  
+  // Sort completed interviews by completedAt date (most recent first)
+  const sortedCompletedInterviews = useMemo(() => {
+    return [...filteredCompletedInterviews].sort((a, b) => {
+      const dateA = new Date(a.completedAt || a.scheduledFor);
+      const dateB = new Date(b.completedAt || b.scheduledFor);
+      return dateB.getTime() - dateA.getTime(); // Sort in descending order (newest first)
+    });
+  }, [filteredCompletedInterviews]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -281,21 +325,36 @@ const AdminDashboard: React.FC = () => {
                     Interviews that are scheduled or in progress
                   </CardDescription>
                 </div>
-                <Select value={pendingSortBy} onValueChange={(value: 'date' | 'stack' | 'status') => setPendingSortBy(value)}>
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="date">Sort by Date</SelectItem>
-                    <SelectItem value="stack">Sort by Tech Stack</SelectItem>
-                    <SelectItem value="status">Sort by Status</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex space-x-2">
+                  <Select value={pendingMonthFilter} onValueChange={setPendingMonthFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filter by Month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Months</SelectItem>
+                      {getLast12Months().map(month => (
+                        <SelectItem key={month.value} value={month.value}>
+                          {month.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={pendingSortBy} onValueChange={(value: 'nearest' | 'stack' | 'status') => setPendingSortBy(value)}>
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nearest">Nearest Date</SelectItem>
+                      <SelectItem value="stack">Tech Stack</SelectItem>
+                      <SelectItem value="status">Status</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </CardHeader>
               <CardContent>
-                {sortedPendingInterviews.length > 0 ? (
+                {filteredPendingInterviews.length > 0 ? (
                   <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
-                    {sortedPendingInterviews.map(interview => {
+                    {filteredPendingInterviews.map(interview => {
                       const techStack = availableTechStacks.find(
                         stack => stack.id === interview.stackId
                       );
@@ -310,7 +369,7 @@ const AdminDashboard: React.FC = () => {
                               {techStack?.name || 'Unknown'} Interview
                             </p>
                             <p className="text-sm text-gray-500">
-                              Started: {new Date(interview.createdAt).toLocaleString()}
+                              Scheduled: {new Date(interview.scheduledDate || interview.createdAt).toLocaleString()}
                             </p>
                             <div className="mt-1">
                               <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
@@ -348,15 +407,30 @@ const AdminDashboard: React.FC = () => {
                   Interviews that have been completed and evaluated
                 </CardDescription>
               </div>
-              <Select value={completedSortBy} onValueChange={(value: 'date' | 'stack') => setCompletedSortBy(value)}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="date">Sort by Date</SelectItem>
-                  <SelectItem value="stack">Sort by Tech Stack</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex space-x-2">
+                <Select value={completedMonthFilter} onValueChange={setCompletedMonthFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Months</SelectItem>
+                    {getLast12Months().map(month => (
+                      <SelectItem key={month.value} value={month.value}>
+                        {month.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={completedSortBy} onValueChange={(value: 'recent' | 'stack') => setCompletedSortBy(value)}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recent">Most Recent</SelectItem>
+                    <SelectItem value="stack">Tech Stack</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               {sortedCompletedInterviews.length > 0 ? (

@@ -312,4 +312,29 @@ router.get('/debug/:id', protect, authorize('admin'), async (req, res) => {
   }
 });
 
+// @desc    Batch upload answers
+// @route   POST /api/v1/answers/batch
+// @access  Private
+router.post('/batch', protect, async (req, res) => {
+  try {
+    const answers = req.body; // array of answers
+    if (!Array.isArray(answers)) {
+      return res.status(400).json({ success: false, error: 'Request body must be an array of answers' });
+    }
+    const results = [];
+    for (const ans of answers) {
+      // Upsert by interview+question
+      let answer = await Answer.findOneAndUpdate(
+        { interview: ans.interview, question: ans.question },
+        ans,
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      results.push(answer);
+    }
+    res.status(201).json({ success: true, data: results });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 export default router; 

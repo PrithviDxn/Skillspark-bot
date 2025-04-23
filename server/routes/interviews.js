@@ -86,6 +86,7 @@ router.post('/', protect, async (req, res) => {
       req.body.candidate = req.user.id;
     }
     
+    console.log('[INTERVIEW CREATE] req.body:', req.body);
     const interview = await Interview.create(req.body);
 
     res.status(201).json({
