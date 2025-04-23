@@ -24,7 +24,8 @@ const Interview: React.FC = () => {
     getQuestionsForStack, 
     saveAnswer,
     endInterview,
-    useFreeMode
+    useFreeMode,
+    availableTechStacks
   } = useInterview();
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -48,15 +49,18 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
 
   useEffect(() => {
     // Find the interview if we don't have it in state
+    // Debug logging
+    console.log('Interview page: interviewId:', interviewId);
+    console.log('Interview page: currentInterview:', currentInterview);
+    console.log('Interview page: interviews:', interviews);
+
     if (!currentInterview && interviewId) {
       const interview = interviews.find(i => i.id === interviewId);
       if (interview) {
         setCurrentInterview(interview);
-        
         // Load questions for this stack
         const loadedQuestions = getQuestionsForStack(interview.stackId);
         setQuestions(loadedQuestions);
-        
         // Initialize answered questions
         const answered = new Set<string>();
         interview.answers.forEach(answer => {
@@ -64,8 +68,21 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
         });
         setAnsweredQuestions(answered);
       } else {
-        // Interview not found, redirect
-        navigate('/');
+        // Try to fetch interview by ID from backend
+        if (typeof interviewId === 'string' && interviewId.length > 0 && typeof window !== 'undefined') {
+          if (typeof window.fetchInterviewAttempted === 'undefined') {
+            window.fetchInterviewAttempted = {};
+          }
+          if (!window.fetchInterviewAttempted[interviewId]) {
+            window.fetchInterviewAttempted[interviewId] = true;
+            if (typeof window.refreshInterview === 'function') {
+              window.refreshInterview(interviewId);
+            }
+          }
+        }
+        // Show fallback UI
+        setQuestions([]);
+        setAnsweredQuestions(new Set());
       }
     } else if (currentInterview) {
       // Load questions for this stack
@@ -110,7 +127,35 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
   }, [currentQuestionIndex]);
 
   // Ensure the user has access to this interview
-  if (!user || !currentInterview || (user.role === 'user' && user._id !== currentInterview.candidateId)) {
+  if (!user) {
+    return (
+      <Layout>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Unauthorized Access</h1>
+          <p className="mt-2">You must be logged in to view this interview.</p>
+          <Button className="mt-4" asChild>
+            <a href="/">Go Home</a>
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!currentInterview) {
+    return (
+      <Layout>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Interview Not Found</h1>
+          <p className="mt-2">The interview could not be found. Please check the link or try refreshing.</p>
+          <Button className="mt-4" asChild>
+            <a href="/">Go Home</a>
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (user.role === 'user' && user._id !== currentInterview.candidateId) {
     return (
       <Layout>
         <div className="text-center">
@@ -125,6 +170,47 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
   }
 
   const currentQuestion = questions[currentQuestionIndex];
+  // Lookup tech stack name
+  console.log('DEBUG: availableTechStacks:', availableTechStacks);
+  console.log('DEBUG: currentInterview.stackId:', currentInterview.stackId);
+  let techStackWarning = '';
+  let techStackName = '';
+
+  if (!techStackName && availableTechStacks && availableTechStacks.length > 0) {
+    const found = availableTechStacks.find(stack => stack.id === currentInterview.stackId);
+    if (found) {
+      techStackName = found.name;
+    } else {
+      techStackWarning = `Tech stack ID ${currentInterview.stackId} not found in availableTechStacks.`;
+    }
+  }
+  if (!techStackName) {
+    techStackName = currentInterview.stackId;
+  }
+  // Format scheduled date and time
+  let formattedDate = '';
+  let formattedTime = '';
+  if (currentInterview.scheduledDate) {
+    const dateObj = new Date(currentInterview.scheduledDate);
+    formattedDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    formattedTime = dateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  // Debug log for questions
+  console.log('Interview page: questions:', questions);
+  if (!questions || questions.length === 0) {
+    return (
+      <Layout>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">No Questions Found</h1>
+          <p className="mt-2">No questions are available for this interview's tech stack. Please contact an administrator.</p>
+          <Button className="mt-4" asChild>
+            <a href="/">Go Home</a>
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
   
   const handleRecordingComplete = async (audioBlob: Blob, transcript?: string) => {
     if (!currentInterview || !currentQuestion) return;
@@ -256,7 +342,11 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
             const evalRes = await aiAPI.evaluate({
               question: local.questionText,
               transcript,
-              techStack: (currentInterview.stackName || questions[0]?.techStack || undefined)
+              techStack: (
+                availableTechStacks.find(s => s.id === currentInterview.stackId)?.name ||
+                undefined ||
+                undefined
+              )
             });
             if (evalRes.data?.data) {
               score = evalRes.data.data.score;
@@ -382,7 +472,30 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
           </Card>
         ) : (
           <>
+            {/* Interview Info for Candidate */}
             <div className="mb-6">
+              <div className="mb-2 p-3 bg-gray-50 rounded-md border text-sm">
+                <div><span className="font-semibold">Tech Stack:</span> {techStackName}</div>
+                {techStackWarning && (
+                  <div className="text-xs text-red-600 mt-1">{techStackWarning}</div>
+                )}
+                {/* DEBUG: List all availableTechStacks */}
+                <div className="mt-2 text-xs text-gray-400">
+                  <div>Debug: All Tech Stacks Loaded:</div>
+                  <ul>
+                    {availableTechStacks && availableTechStacks.length > 0 ? (
+                      availableTechStacks.map(stack => (
+                        <li key={stack.id}>{stack.id}: {stack.name}</li>
+                      ))
+                    ) : (
+                      <li>None loaded</li>
+                    )}
+                  </ul>
+                </div>
+                <div><span className="font-semibold">Scheduled Date:</span> {formattedDate}</div>
+                <div><span className="font-semibold">Scheduled Time:</span> {formattedTime}</div>
+                <div><span className="font-semibold">Duration:</span> {currentInterview.duration} min</div>
+              </div>
               <div className="flex justify-between items-center mb-2">
                 <h2 className="text-lg font-medium">Question {currentQuestionIndex + 1} of {questions.length}</h2>
                 <span className="text-sm text-gray-500">

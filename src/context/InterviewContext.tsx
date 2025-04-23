@@ -37,9 +37,12 @@ export type Interview = {
   id: string;
   candidateId: string;
   stackId: string;
-  status: 'pending' | 'in-progress' | 'completed';
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
   createdAt: string;
   completedAt?: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  duration: number;
   answers: Answer[];
 };
 
@@ -466,14 +469,18 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       // Convert API format to our internal format
       const newInterview: Interview = {
-        id: apiInterview._id,
-        candidateId: apiInterview.candidate,
-        stackId: apiInterview.techStack,
+        _id: apiInterview._id || apiInterview.id,
+        id: apiInterview._id || apiInterview.id,
+        candidateId: typeof apiInterview.candidate === 'object' ? apiInterview.candidate._id : apiInterview.candidate,
+        stackId: typeof apiInterview.techStack === 'object' ? apiInterview.techStack._id : apiInterview.techStack,
         status: 'in-progress',
         createdAt: apiInterview.createdAt,
+        completedAt: apiInterview.completedAt,
+        scheduledDate: apiInterview.scheduledDate,
+        scheduledTime: apiInterview.scheduledTime,
+        duration: apiInterview.duration,
         answers: []
       };
-      
       setInterviews(prev => [...prev, newInterview]);
       setCurrentInterview(newInterview);
       toast.success('Interview started!');
@@ -781,11 +788,12 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           id: interview._id,
           candidateId: typeof interview.candidate === 'object' ? interview.candidate._id : interview.candidate,
           stackId: typeof interview.techStack === 'object' ? interview.techStack._id : interview.techStack,
-          status: interview.status === 'cancelled' 
-            ? 'completed' // Map 'cancelled' to 'completed' to match our interface
-            : (interview.status as 'pending' | 'in-progress' | 'completed'),
+          status: interview.status as 'scheduled' | 'in-progress' | 'completed' | 'cancelled',
           createdAt: interview.createdAt,
           completedAt: interview.completedAt,
+          scheduledDate: interview.scheduledDate,
+          scheduledTime: interview.scheduledTime,
+          duration: interview.duration,
           answers: []
         }));
 
@@ -846,14 +854,16 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       // Convert to our internal format
       const formattedInterview: Interview = {
-        id: apiInterview._id,
+        _id: apiInterview._id || apiInterview.id,
+        id: apiInterview._id || apiInterview.id,
         candidateId: typeof apiInterview.candidate === 'object' ? apiInterview.candidate._id : apiInterview.candidate as string,
         stackId: typeof apiInterview.techStack === 'object' ? apiInterview.techStack._id : apiInterview.techStack as string,
-        status: apiInterview.status === 'cancelled' 
-          ? 'completed' 
-          : (apiInterview.status as 'pending' | 'in-progress' | 'completed'),
+        status: apiInterview.status as 'scheduled' | 'in-progress' | 'completed' | 'cancelled',
         createdAt: apiInterview.createdAt,
         completedAt: apiInterview.completedAt,
+        scheduledDate: apiInterview.scheduledDate,
+        scheduledTime: apiInterview.scheduledTime,
+        duration: apiInterview.duration,
         answers: []
       };
       

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import { useInterview, TechStack } from '@/context/InterviewContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,20 +10,65 @@ import { Play } from 'lucide-react';
 
 const CandidateSelect: React.FC = () => {
   const { user } = useAuth();
-  const { availableTechStacks, startInterview } = useInterview();
-  const [selectedStack, setSelectedStack] = useState<string | null>(null);
+  const { interviews, refreshInterview, availableTechStacks } = useInterview();
   const [isLoading, setIsLoading] = useState(false);
+  const [scheduled, setScheduled] = useState<any[]>([]);
+
+  // Helper: normalize interview object fields for scheduledDate, scheduledTime, status
+  const getScheduledFields = (iv: any) => {
+    // Try both camelCase and snake_case for compatibility
+    return {
+      scheduledDate: iv.scheduledDate || iv.scheduled_date || '',
+      scheduledTime: iv.scheduledTime || iv.scheduled_time || '',
+      duration: iv.duration,
+      status: iv.status,
+      id: iv._id || iv.id, // Fallback to id if _id is missing
+      stackId: iv.stackId || iv.techStack || '',
+    };
+  };
   const navigate = useNavigate();
 
-  const handleStartInterview = async () => {
-    if (!selectedStack || !user) return;
-    
+  useEffect(() => {
+    if (!user) return;
+    // Only show interviews scheduled for this candidate and with correct status
+    const filtered = interviews.filter((iv: any) => {
+      const { status } = getScheduledFields(iv);
+      return iv.candidateId === user._id && (status === 'pending' || status === 'scheduled');
+    });
+    setScheduled(filtered);
+  }, [user, interviews]);
+
+  // Helper to check if interview can be started now
+  const canStart = (iv: any) => {
+    const { scheduledDate, scheduledTime } = getScheduledFields(iv);
+    if (!scheduledDate) return false;
+    // Use actual local time
+    const now = new Date();
+    let start: Date;
+    if (scheduledTime) {
+      start = new Date(`${scheduledDate}T${scheduledTime}`);
+    } else {
+      start = new Date(scheduledDate);
+    }
+    // Enable as soon as the scheduled start time is reached
+    return now >= start;
+  };
+
+  const handleStart = async (interviewId: string) => {
+    console.log('handleStart: interviewId =', interviewId, 'typeof:', typeof interviewId);
     setIsLoading(true);
     try {
-      const interview = await startInterview(user._id, selectedStack);
-      navigate(`/interview/${interview.id}`);
-    } catch (error) {
-      console.error('Failed to start interview:', error);
+      // Call backend start endpoint
+      const res = await api.post(`/interviews/${interviewId}/start`);
+      if (res.data && res.data.success) {
+        // Refresh interview in state
+        await refreshInterview(interviewId);
+        navigate(`/interview/${interviewId}`);
+      } else {
+        alert('Could not start interview: ' + (res.data?.message || 'Unknown error'));
+      }
+    } catch (err: any) {
+      alert('Could not start interview: ' + (err.response?.data?.message || err.message));
     } finally {
       setIsLoading(false);
     }
@@ -44,76 +90,56 @@ const CandidateSelect: React.FC = () => {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold mb-2">Select Your Technology Stack</h1>
+          <h1 className="text-3xl font-bold mb-2">Your Scheduled Interviews</h1>
           <p className="text-gray-600">
-            Choose the technology you'd like to be interviewed on
+            You can only start an interview during its scheduled time window.
           </p>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {availableTechStacks.map((stack) => (
-            <div
-              key={stack.id}
-              className={`tech-stack-card ${selectedStack === stack.id ? 'selected' : ''}`}
-              onClick={() => setSelectedStack(stack.id)}
-            >
-              <div className="flex items-start space-x-4">
-                <div className="text-3xl">{stack.icon}</div>
-                <div className="flex-1">
-                  <h3 className="font-medium text-lg">{stack.name}</h3>
-                  <p className="text-gray-600 text-sm">{stack.description}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        
-        <Card>
-          <CardContent className="p-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium">What to expect</h3>
-              <ul className="mt-2 space-y-2 text-sm text-gray-600">
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>You will be asked 5 technical questions related to your selected technology.</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Questions will vary in difficulty from easy to challenging.</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Answer each question by recording your voice response.</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Your answers will be evaluated after the interview is complete.</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>The entire process takes approximately 15-20 minutes.</span>
-                </li>
-              </ul>
-            </div>
-            
-            <Button 
-              onClick={handleStartInterview} 
-              disabled={!selectedStack || isLoading}
-              className="w-full"
-            >
-              {isLoading ? (
-                'Starting Interview...'
-              ) : (
-                <>
-                  <Play size={16} className="mr-2" />
-                  Start Interview
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+        {scheduled.length === 0 ? (
+          <div className="text-center text-gray-500">No scheduled interviews found. Please wait for an admin to schedule your interview.</div>
+        ) : (
+          <div className="space-y-6">
+            {scheduled.map((iv) => {
+              const { id, stackId, scheduledDate, scheduledTime, duration } = getScheduledFields(iv);
+              return (
+                <Card key={id}>
+                  <CardContent className="p-6 flex flex-col md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <div className="font-semibold text-lg mb-1">
+  Tech Stack: <span className="font-normal">{
+    availableTechStacks.find((stack: TechStack) => stack.id === stackId)?.name || (
+      <span className="text-red-500">Unknown</span>
+    )
+  }</span>
+</div>
+                      <div className="text-sm text-gray-600 mb-1">Scheduled Date: {scheduledDate}</div>
+                      <div className="text-sm text-gray-600 mb-1">
+  Scheduled Time: {
+    scheduledTime || (scheduledDate ? new Date(scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')
+  }
+</div>
+                      <div className="text-sm text-gray-600">Duration: {duration || 30} min</div>
+                    </div>
+                    <div className="mt-4 md:mt-0 md:ml-6">
+                      <Button
+                        onClick={() => handleStart(id)}
+                        disabled={!canStart(iv) || isLoading}
+                        className="w-full"
+                      >
+                        {isLoading ? 'Starting...' : <><Play size={16} className="mr-2" />Start Interview</>}
+                      </Button>
+                      {!canStart(iv) && (
+                        <div className="text-xs text-gray-400 mt-2">Interview can only be started during the scheduled window.</div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
     </Layout>
   );

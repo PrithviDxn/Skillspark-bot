@@ -66,8 +66,8 @@ export const interviewAPI = {
     candidate: string;
     techStack: string;
     scheduledDate: string;
-    scheduledTime: string;
     duration: number;
+    scheduledTime?: string; // Optional for backward compatibility
   }) => api.post('/interviews', interviewData),
   update: (id: string, interviewData: {
     status?: string;

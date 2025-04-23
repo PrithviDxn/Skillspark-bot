@@ -13,36 +13,86 @@ import { cn } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { useInterview } from '@/context/InterviewContext';
+import { interviewAPI, userAPI } from '@/api';
 
 type ScheduleFormData = {
-  candidateEmail: string;
-  techStackId: string;
+  candidateId: string; // ObjectId of the candidate
+  techStackId: string; // ObjectId of the tech stack
   datetime: {
-    date: Date;
+    date: string | Date;
     time: string;
   };
 };
 
 const InterviewScheduler = () => {
-  const { availableTechStacks } = useInterview();
-  const form = useForm<ScheduleFormData>();
+  const { availableTechStacks, refreshTechStacks } = useInterview();
+  const { refreshInterview } = useInterview();
+  const { interviews } = useInterview();
+  const form = useForm<ScheduleFormData>({
+    defaultValues: {
+      candidateId: '',
+      techStackId: '',
+      datetime: {
+        date: undefined,
+        time: ''
+      }
+    }
+  });
 
-  const handleSubmit = (data: ScheduleFormData) => {
-    // Combine date and time into a single Date object
-    const { date } = data.datetime;
-    const [hours, minutes] = data.datetime.time.split(':');
-    
-    const combinedDateTime = new Date(date);
-    combinedDateTime.setHours(parseInt(hours), parseInt(minutes));
+  // Candidate state
+  const [candidates, setCandidates] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    userAPI.getAll().then(res => {
+      setCandidates(res.data.data || []);
+    });
+  }, []);
 
-    const scheduleData = {
-      ...data,
-      datetime: combinedDateTime,
-    };
 
-    console.log('Schedule interview:', scheduleData);
-    toast.success('Interview scheduled successfully (demo)');
-    form.reset();
+  const handleSubmit = async (data: ScheduleFormData) => {
+    try {
+      // Debug: log the date and time being submitted
+      console.log('Submitting datetime:', data.datetime);
+      // Combine date and time into a single ISO string for backend
+      const { date, time } = data.datetime;
+      let scheduledDate: string;
+      if (date && time) {
+        // date is a Date object or string
+        const dateObj = typeof date === 'string' ? new Date(date) : date;
+        const [hours, minutes] = time.split(':');
+        dateObj.setHours(Number(hours));
+        dateObj.setMinutes(Number(minutes));
+        dateObj.setSeconds(0);
+        dateObj.setMilliseconds(0);
+        scheduledDate = dateObj.toISOString();
+      } else {
+        scheduledDate = typeof date === 'string' ? date : date.toISOString();
+      }
+
+      // Prepare payload for API
+      const payload = {
+        candidate: data.candidateId,
+        techStack: data.techStackId,
+        scheduledDate, // Send as full ISO string
+        duration: 30 // Optional, default to 30 minutes
+      };
+
+      // Call the backend API to create the interview
+      const response = await interviewAPI.create(payload);
+      if (response.data && response.data.success && response.data.data) {
+        toast.success('Interview scheduled successfully!');
+        form.reset();
+        // Refresh the interview list so the new interview appears
+        if (typeof refreshTechStacks === 'function') {
+          await refreshTechStacks(); // refreshes interviews as well on mount
+        }
+      } else {
+        toast.error('Failed to schedule interview.');
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error scheduling interview:', error);
+      toast.error('Failed to schedule interview.');
+    }
   };
 
   return (
@@ -56,13 +106,24 @@ const InterviewScheduler = () => {
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
             <FormField
               control={form.control}
-              name="candidateEmail"
+              name="candidateId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Candidate Email</FormLabel>
-                  <FormControl>
-                    <Input placeholder="candidate@example.com" {...field} />
-                  </FormControl>
+                  <FormLabel>Candidate</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a candidate" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {candidates.map(candidate => (
+                        <SelectItem key={candidate._id} value={candidate._id}>
+                          {candidate.name} ({candidate.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </FormItem>
               )}
             />
@@ -122,9 +183,13 @@ const InterviewScheduler = () => {
                       <div className="space-y-4">
                         <Calendar
                           mode="single"
-                          selected={field.value?.date}
+                          selected={typeof field.value?.date === 'string' ? new Date(field.value.date) : field.value?.date}
                           onSelect={(date) => field.onChange({ ...field.value, date })}
-                          disabled={(date) => date < new Date()}
+                          disabled={(date) => {
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            return date < today;
+                          }}
                           initialFocus
                           className="pointer-events-auto"
                         />
@@ -133,6 +198,20 @@ const InterviewScheduler = () => {
                           <Input
                             type="time"
                             value={field.value?.time || ""}
+                            min={(() => {
+                              const selectedDate = typeof field.value?.date === 'string' ? new Date(field.value.date) : field.value?.date;
+                              const now = new Date();
+                              if (
+                                selectedDate &&
+                                selectedDate.getFullYear() === now.getFullYear() &&
+                                selectedDate.getMonth() === now.getMonth() &&
+                                selectedDate.getDate() === now.getDate()
+                              ) {
+                                // Only allow times after the current time if today is selected
+                                return now.toTimeString().slice(0,5);
+                              }
+                              return undefined;
+                            })()}
                             onChange={(e) => field.onChange({ ...field.value, time: e.target.value })}
                             className="mt-2"
                           />

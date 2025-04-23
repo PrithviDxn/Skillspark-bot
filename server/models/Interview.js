@@ -27,10 +27,6 @@ const InterviewSchema = new mongoose.Schema({
     type: Date,
     required: [true, 'Please specify a scheduled date']
   },
-  scheduledTime: {
-    type: String,
-    required: [true, 'Please specify a scheduled time']
-  },
   duration: {
     type: Number,
     required: [true, 'Please specify interview duration in minutes'],

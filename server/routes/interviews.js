@@ -75,17 +75,13 @@ router.get('/:id', protect, async (req, res) => {
 
 // @desc    Create new interview
 // @route   POST /api/v1/interviews
-// @access  Private (Previously Admin only, now any authenticated user)
-router.post('/', protect, async (req, res) => {
+// @access  Private (Admin only)
+router.post('/', protect, authorize('admin'), async (req, res) => {
   try {
     // Add user id as createdBy
     req.body.createdBy = req.user.id;
     
-    // If user is not an admin, they can only create interviews for themselves
-    if (req.user.role !== 'admin') {
-      req.body.candidate = req.user.id;
-    }
-    
+    // Only admins can schedule interviews for any candidate
     console.log('[INTERVIEW CREATE] req.body:', req.body);
     const interview = await Interview.create(req.body);
 
@@ -179,6 +175,45 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
       success: false,
       error: err.message
     });
+  }
+});
+
+// @desc    Start interview (candidate only, only during scheduled window)
+// @route   POST /api/v1/interviews/:id/start
+// @access  Private (Candidate only)
+router.post('/:id/start', protect, async (req, res) => {
+  try {
+    console.log('POST /:id/start called with id:', req.params.id, 'typeof:', typeof req.params.id);
+
+    const interview = await Interview.findById(req.params.id);
+    console.log('Interview.findById result:', interview);
+    if (!interview) {
+      return res.status(404).json({ success: false, error: 'Interview not found' });
+    }
+    // Only candidate can start their own interview
+    const candidateId = interview.candidate._id || interview.candidate;
+    if (candidateId.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    // Combine scheduledDate and scheduledTime
+    const scheduledStart = new Date(`${interview.scheduledDate}T${interview.scheduledTime}`);
+    const now = new Date();
+    const scheduledEnd = new Date(scheduledStart.getTime() + (interview.duration || 30) * 60000);
+    if (now < scheduledStart) {
+      return res.status(403).json({ success: false, error: 'Interview has not started yet.' });
+    }
+    if (now > scheduledEnd) {
+      return res.status(403).json({ success: false, error: 'Interview window has passed.' });
+    }
+    // Only allow if interview is scheduled (not already started/completed)
+    if (interview.status !== 'scheduled') {
+      return res.status(400).json({ success: false, error: 'Interview cannot be started in current state.' });
+    }
+    interview.status = 'in-progress';
+    await interview.save();
+    res.status(200).json({ success: true, data: interview });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 

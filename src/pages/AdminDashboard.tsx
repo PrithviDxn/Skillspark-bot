@@ -84,7 +84,7 @@ const AdminDashboard: React.FC = () => {
     if (pendingMonthFilter === 'all') return pendingInterviews;
     
     return pendingInterviews.filter((interview) => {
-      const interviewDate = new Date(interview.scheduledFor);
+      const interviewDate = new Date(interview.scheduledDate);
       const month = interviewDate.getMonth() + 1; // JS months are 0-indexed
       return month.toString() === pendingMonthFilter;
     });
@@ -95,7 +95,7 @@ const AdminDashboard: React.FC = () => {
     if (completedMonthFilter === 'all') return completedInterviews;
     
     return completedInterviews.filter((interview) => {
-      const interviewDate = new Date(interview.completedAt || interview.scheduledFor);
+      const interviewDate = new Date(interview.completedAt || interview.scheduledDate);
       const month = interviewDate.getMonth() + 1; // JS months are 0-indexed
       return month.toString() === completedMonthFilter;
     });
@@ -104,8 +104,8 @@ const AdminDashboard: React.FC = () => {
   // Sort completed interviews by completedAt date (most recent first)
   const sortedCompletedInterviews = useMemo(() => {
     return [...filteredCompletedInterviews].sort((a, b) => {
-      const dateA = new Date(a.completedAt || a.scheduledFor);
-      const dateB = new Date(b.completedAt || b.scheduledFor);
+      const dateA = new Date(a.completedAt || a.scheduledDate);
+      const dateB = new Date(b.completedAt || b.scheduledDate);
       return dateB.getTime() - dateA.getTime(); // Sort in descending order (newest first)
     });
   }, [filteredCompletedInterviews]);
@@ -369,7 +369,9 @@ const AdminDashboard: React.FC = () => {
                               {techStack?.name || 'Unknown'} Interview
                             </p>
                             <p className="text-sm text-gray-500">
-                              Scheduled: {new Date(interview.scheduledDate || interview.createdAt).toLocaleString()}
+                              Scheduled: {interview.scheduledDate
+                                ? new Date(interview.scheduledDate).toLocaleString()
+                                : 'N/A'}
                             </p>
                             <div className="mt-1">
                               <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
