@@ -53,6 +53,28 @@ const Interview: React.FC = () => {
       refreshInterview(interviewId).then(fetched => {
         if (fetched) {
           setCurrentInterview(fetched);
+          
+          // Try to restore progress from storage (try sessionStorage first, then localStorage)
+          const savedProgress = sessionStorage.getItem(`interview-progress-${interviewId}`) || 
+                              localStorage.getItem(`interview-progress-${interviewId}`);
+          if (savedProgress) {
+            try {
+              const progress = JSON.parse(savedProgress);
+              console.log('Restored progress:', progress);
+              if (progress.questionIndex !== undefined) {
+                // Force a timeout to ensure this happens after initial render
+                setTimeout(() => {
+                  setCurrentQuestionIndex(progress.questionIndex);
+                  console.log('Set question index to:', progress.questionIndex);
+                }, 100);
+              }
+              if (progress.answeredQuestions && Array.isArray(progress.answeredQuestions)) {
+                setAnsweredQuestions(new Set(progress.answeredQuestions));
+              }
+            } catch (e) {
+              console.error('Failed to parse saved progress:', e);
+            }
+          }
         }
       });
     }
@@ -71,6 +93,27 @@ const Interview: React.FC = () => {
       }
     }
   }, [currentInterview, interviewId, refreshInterview, setCurrentInterview, getQuestionsForStack]);
+  
+  // Save progress to local storage whenever it changes
+  useEffect(() => {
+    if (interviewId && currentQuestionIndex !== undefined) {
+      // Use sessionStorage instead of localStorage for more reliable session persistence
+      try {
+        sessionStorage.setItem(`interview-progress-${interviewId}`, JSON.stringify({
+          questionIndex: currentQuestionIndex,
+          answeredQuestions: Array.from(answeredQuestions)
+        }));
+        // Also save to localStorage as backup
+        localStorage.setItem(`interview-progress-${interviewId}`, JSON.stringify({
+          questionIndex: currentQuestionIndex,
+          answeredQuestions: Array.from(answeredQuestions)
+        }));
+        console.log('Saved progress to storage:', currentQuestionIndex);
+      } catch (e) {
+        console.error('Failed to save progress:', e);
+      }
+    }
+  }, [interviewId, currentQuestionIndex, answeredQuestions]);
   
   // Add the autoSubmitCountdown effect here at the top level
   useEffect(() => {
@@ -160,11 +203,6 @@ const Interview: React.FC = () => {
     if (!currentInterview || !questions[currentQuestionIndex]) return;
     setIsSubmitting(true);
     try {
-      // Stop the timer
-      if (timerRef.current) {
-        window.clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
       // Use the currentQuestion defined at the top level
       const answerObj = {
         interview: currentInterview.id,
@@ -173,21 +211,23 @@ const Interview: React.FC = () => {
         transcript,
         questionText: currentQuestion?.text || ''
       };
+      
+      // Store the answer but don't move to next question
       setLocalAnswers(prev => {
         // Replace if already exists for this question
         const filtered = prev.filter(a => a.questionId !== currentQuestion?.id);
         return [...filtered, answerObj];
       });
+      
+      // Mark as answered but don't change any other state
       if (currentQuestion?.id) {
         setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
       }
-      if (currentQuestionIndex === questions.length - 1) {
-        setShowComplete(true);
-      } else {
-        setCurrentQuestionIndex(prev => prev + 1);
-      }
-      setIsAnswering(false);
-      setHasTimerStarted(false);
+      
+      // Show a success message
+      toast.success('Response recorded! You can re-record or move to the next question.');
+      
+      // Don't stop the timer or change question - let the user decide when to move on
     } catch (error) {
       console.error('Failed to store answer:', error);
       toast.error('Failed to store answer locally. Please try again.');
@@ -332,24 +372,52 @@ const Interview: React.FC = () => {
   };
 
   const handleSkipQuestion = () => {
-    // Clear timers
+    // Clear any existing timers
     if (timerRef.current) {
       window.clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    
     if (autoSubmitRef.current) {
       window.clearInterval(autoSubmitRef.current);
       autoSubmitRef.current = null;
     }
     
+    // Reset states
+    setIsAnswering(false);
+    setHasTimerStarted(false);
+    setAutoSubmitCountdown(0);
+    
+    // Move to next question
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
       setShowComplete(true);
     }
+  };
+  
+  // Add a new function to move to next question (separate from skip)
+  const handleNextQuestion = () => {
+    // Same as skip but with a different message
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (autoSubmitRef.current) {
+      window.clearInterval(autoSubmitRef.current);
+      autoSubmitRef.current = null;
+    }
+    
+    // Reset states
     setIsAnswering(false);
     setHasTimerStarted(false);
+    setAutoSubmitCountdown(0);
+    
+    // Move to next question
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      setShowComplete(true);
+    }
   };
 
   // Format time as MM:SS
@@ -405,7 +473,6 @@ const Interview: React.FC = () => {
             {/* Interview Info for Candidate */}
             <div className="mb-6">
               <div className="mb-2 p-3 bg-gray-50 rounded-md border text-sm">
-                <div><span className="font-semibold">Candidate:</span> {currentInterview?.candidateName || 'You'}</div>
                 <div><span className="font-semibold">Tech Stack:</span> {techStackName}</div>
                 {techStackWarning && (
                   <div className="text-xs text-red-600 mt-1">{techStackWarning}</div>
@@ -430,7 +497,7 @@ const Interview: React.FC = () => {
             
             <Card className="shadow-md">
               <CardContent className="p-6">
-                <div className="mb-4">
+                <div>
                   {hasTimerStarted && (
                     <div className={`flex items-center ${timeRemaining <= 30 ? 'text-red-500' : 'text-gray-500'} mb-4 justify-end`}>
                       <Clock size={18} className="mr-2" />
@@ -454,9 +521,12 @@ const Interview: React.FC = () => {
                     </span>
                   </div>
                   
-                  <h3 className="text-xl font-medium mb-6">
-                    {currentQuestion?.text || 'Loading question...'}
-                  </h3>
+                  {/* Only show question text if user has clicked Answer This Question */}
+                  {isAnswering && (
+                    <h3 className="text-xl font-medium mb-6">
+                      {currentQuestion?.text || 'Loading question...'}
+                    </h3>
+                  )}
                 </div>
                 
                 {isAnswering ? (
@@ -469,10 +539,21 @@ const Interview: React.FC = () => {
                     <div className="mt-4 flex justify-between">
                       <Button 
                         variant="outline" 
-                        onClick={handleSkipQuestion}
+                        onClick={() => {
+                          // Reset recording state but keep timer running
+                          setIsAnswering(false);
+                          setTimeout(() => setIsAnswering(true), 100);
+                        }}
                         disabled={isSubmitting}
                       >
-                        Skip Question
+                        Re-record Response
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleNextQuestion}
+                        disabled={isSubmitting}
+                      >
+                        {currentQuestionIndex === questions.length - 1 ? 'Finish Interview' : 'Next Question'}
                       </Button>
                     </div>
                   </div>
@@ -481,35 +562,31 @@ const Interview: React.FC = () => {
                     <Button onClick={handleStartAnswering} className="w-full">
                       Answer This Question
                     </Button>
-                    <div className="mt-4 text-center">
-                      <button
-                        onClick={handleSkipQuestion}
-                        className="text-sm text-gray-500 hover:text-gray-900"
-                      >
-                        Skip to next question
-                      </button>
-                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
             
-            <div className="mt-6 flex justify-between">
-              <Button 
-                variant="outline" 
-                onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
-                disabled={currentQuestionIndex === 0 || isAnswering}
-              >
-                Previous Question
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setCurrentQuestionIndex(prev => Math.min(questions.length - 1, prev + 1))}
-                disabled={currentQuestionIndex === questions.length - 1 || isAnswering}
-              >
-                Next Question
-                <ArrowRight size={16} className="ml-2" />
-              </Button>
+            <div className="mt-6 flex justify-end">
+              {currentQuestionIndex === questions.length - 1 ? (
+                <Button 
+                  variant="outline" 
+                  onClick={handleFinishInterview}
+                  disabled={isAnswering}
+                >
+                  Finish Interview
+                  <CheckCircle size={16} className="ml-2" />
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  onClick={() => setCurrentQuestionIndex(prev => Math.min(questions.length - 1, prev + 1))}
+                  disabled={isAnswering}
+                >
+                  Next Question
+                  <ArrowRight size={16} className="ml-2" />
+                </Button>
+              )}
             </div>
           </>
         )}
