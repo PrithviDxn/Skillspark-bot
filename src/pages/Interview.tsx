@@ -299,35 +299,57 @@ const Interview: React.FC = () => {
     try {
       // Prepare answers for batch submission
       const batchAnswers = [];
+      
+      // Process each local answer
       for (const local of localAnswers) {
         // 1. Upload audio
         let audioUrl = undefined;
         if (local.audioBlob) {
           try {
+            console.log('[DEBUG] Uploading audio blob:', local.audioBlob);
             const uploadRes = await uploadAPI.uploadAudio(local.audioBlob);
-            audioUrl = uploadRes.data?.url || uploadRes.data?.audioUrl;
+            console.log('[DEBUG] Upload response data:', uploadRes.data);
+            
+            // Extract the URL from the normalized response
+            audioUrl = uploadRes.data?.url;
+            
+            // If that's not available, try other possible locations
+            if (!audioUrl) {
+              audioUrl = uploadRes.data?.data?.fileUrl || uploadRes.data?.fileUrl || uploadRes.data?.audioUrl;
+              console.log('[DEBUG] Using fallback URL location:', audioUrl);
+            }
+            
+            console.log('[DEBUG] Final extracted audioUrl:', audioUrl);
           } catch (err) {
             console.error('Audio upload failed:', err);
             toast.error('Audio upload failed for one of your answers.');
           }
         }
+        
         // 2. Use transcript from AudioRecorder component
         let transcript = local.transcript;
         if (!transcript && local.audioBlob) {
           // If transcript is missing but we have audio, use a placeholder
-          // The Web Speech API should have already provided the transcript
-          // but we'll handle the case where it might have failed
           transcript = '[TRANSCRIPT FROM WEB SPEECH API NOT AVAILABLE]';
-          console.log('Using placeholder for missing transcript');
+          console.log('[DEBUG] Using placeholder for missing transcript');
         }
         
         // Log the transcript for debugging
-        console.log('Using transcript:', transcript?.substring(0, 100) + (transcript?.length > 100 ? '...' : ''));
+        if (transcript) {
+          console.log('[DEBUG] Using transcript:', transcript.substring(0, 100) + (transcript.length > 100 ? '...' : ''));
+        }
+        
         // 3. Evaluate using local FreeEvaluationService
-        let score, feedback, criteria;
+        let score = 0, feedback = '';
+        let criteria: { technicalAccuracy: number; completeness: number; clarity: number; examples: number } = {
+          technicalAccuracy: 0,
+          completeness: 0,
+          clarity: 0,
+          examples: 0
+        };
         if (transcript && local.questionText) {
           try {
-            console.log('Using FreeEvaluationService for evaluation');
+            console.log('[DEBUG] Using FreeEvaluationService for evaluation');
             const techStackName = availableTechStacks.find(s => s.id === currentInterview.stackId)?.name || '';
             
             // Use the local evaluation service
@@ -341,7 +363,7 @@ const Interview: React.FC = () => {
             feedback = evaluationResult.feedback;
             criteria = evaluationResult.criteria;
             
-            console.log('Local evaluation successful:', { 
+            console.log('[DEBUG] Local evaluation successful:', { 
               score, 
               criteriaKeys: Object.keys(criteria),
               technicalAccuracy: criteria.technicalAccuracy,
@@ -362,6 +384,9 @@ const Interview: React.FC = () => {
             };
           }
         }
+        
+        // 4. Create the answer object to be sent to the server
+        console.log('[DEBUG] Creating answer object with audioUrl:', audioUrl);
         batchAnswers.push({
           interview: currentInterview.id,
           question: local.questionId,
@@ -370,6 +395,13 @@ const Interview: React.FC = () => {
           score,
           feedback,
           criteria
+        });
+        
+        console.log('[DEBUG] Answer object pushed to batch:', {
+          questionId: local.questionId,
+          audioUrl,
+          transcript: transcript ? transcript.substring(0, 30) + '...' : 'undefined',
+          score
         });
       }
       if (batchAnswers.length > 0) {

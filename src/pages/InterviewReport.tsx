@@ -84,34 +84,21 @@ const getFullAudioUrl = (relativeUrl?: string): string | undefined => {
     return relativeUrl;
   }
   
-  // If it's just a filename without path or doesn't start with /uploads, add the uploads path
-  if (!relativeUrl.includes('/') || !relativeUrl.includes('/uploads')) {
-    // Remove any leading slashes
-    const cleanFilename = relativeUrl.replace(/^\/+/, '');
-    // If the path doesn't include 'uploads', add it
-    if (!cleanFilename.startsWith('uploads/')) {
-      relativeUrl = `/uploads/${cleanFilename}`;
-    } else {
-      relativeUrl = `/${cleanFilename}`;
-    }
-  }
+  // Extract just the filename if it's a path
+  const filename = relativeUrl.split('/').pop() || relativeUrl;
   
-  // Get the base API URL
+  // Base URL (without /api/v1)
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
-  
-  // Remove '/api/v1' from the base URL if it exists
-  const baseApiUrl = baseUrl.endsWith('/api/v1') 
-    ? baseUrl.substring(0, baseUrl.length - 7) 
+  const baseServerUrl = baseUrl.includes('/api/v1') 
+    ? baseUrl.substring(0, baseUrl.lastIndexOf('/api/v1')) 
     : baseUrl;
   
-  // Ensure the relative URL starts with a slash
-  const formattedPath = relativeUrl.startsWith('/') 
-    ? relativeUrl 
-    : `/${relativeUrl}`;
+  // Construct the most likely correct URL format
+  // This is the format that matches how the server stores and serves files
+  const correctUrl = `${baseServerUrl}/uploads/${filename}`;
   
-  const fullUrl = `${baseApiUrl}${formattedPath}`;
-  console.log(`Original audio URL: ${relativeUrl} -> Formatted: ${fullUrl}`);
-  return fullUrl;
+  console.log('Constructed audio URL:', correctUrl);
+  return correctUrl;
 };
 
 const InterviewReport: React.FC = () => {
@@ -394,7 +381,44 @@ const InterviewReport: React.FC = () => {
   const fetchAnswerAudio = async (answerId: string) => {
     try {
       toast.info("Fetching audio data directly...");
+      console.log("Fetching audio for answer ID:", answerId);
       
+      // First try to get the answer directly from the API
+      try {
+        const answerResponse = await answerAPI.getById(answerId);
+        console.log("Answer API response:", answerResponse.data);
+        
+        if (answerResponse.data?.success && answerResponse.data?.data) {
+          const apiAnswer = answerResponse.data.data;
+          console.log("API answer data:", apiAnswer);
+          
+          if (apiAnswer.audioUrl) {
+            console.log("Found audio URL in API response:", apiAnswer.audioUrl);
+            
+            // Force update the audio URL from the API response
+            setQuestionsWithAnswers(prev => 
+              prev.map(qa => 
+                qa.answer?.id === answerId 
+                  ? { 
+                      ...qa, 
+                      answer: { 
+                        ...qa.answer, 
+                        audioUrl: apiAnswer.audioUrl
+                      } 
+                    } 
+                  : qa
+              )
+            );
+            
+            toast.success("Audio URL updated from database");
+            return;
+          }
+        }
+      } catch (apiError) {
+        console.error("Error fetching from answer API:", apiError);
+      }
+      
+      // Fallback to direct fetch if the API call fails
       const token = localStorage.getItem('token');
       const response = await fetch(
         `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/answers/${answerId}`, 
@@ -590,7 +614,7 @@ const InterviewReport: React.FC = () => {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
             <Button 
-              variant="ghost" 
+              variant="default"
               className="mr-2"
               onClick={handleBack}
             >
@@ -606,7 +630,7 @@ const InterviewReport: React.FC = () => {
             <Button variant="outline" size="sm" onClick={() => fetchInterviewData()}>
               <RefreshCw className="mr-1" size={14} /> Refresh Data
             </Button>
-            <Button variant="primary" size="sm" onClick={() => fetchInterviewData()}>
+            <Button variant="default" size="sm" onClick={() => fetchInterviewData()}>
               Force Complete Reload
             </Button>
           </div>
@@ -780,9 +804,23 @@ const InterviewReport: React.FC = () => {
                           <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
                             <Info size={16} className="mr-1" /> Audio Response
                           </h4>
+                          {/* Debug info */}
+                          <div className="text-xs text-gray-400 mb-2">
+                            Debug: Answer ID: {qa.answer.id.substring(0, 8)}...
+                            {qa.answer.audioUrl ? ` | Audio: ${qa.answer.audioUrl.substring(0, 15)}...` : ' | No audio URL'}
+                            <button 
+                              onClick={() => {
+                                console.log('Full answer data:', qa.answer);
+                                console.log('Possible audio URL:', qa.answer.audioUrl ? getFullAudioUrl(qa.answer.audioUrl) : 'None');
+                              }}
+                              className="ml-2 underline"
+                            >
+                              Log Details
+                            </button>
+                          </div>
                           <AudioPlayer 
                             audioUrl={qa.answer.audioUrl ? getFullAudioUrl(qa.answer.audioUrl) : undefined}
-                            onError={() => handleAudioError(qa.answer?.id || '')}
+                            answerId={qa.answer.id}
                             onReload={() => qa.answer?.id && fetchAnswerAudio(qa.answer.id)}
                           />
                         </div>
@@ -793,8 +831,9 @@ const InterviewReport: React.FC = () => {
                           </h4>
                           <TranscriptViewer 
                             transcript={qa.answer.transcript}
+                            answerId={qa.answer.id}
                             onReload={() => qa.answer?.id && handleTranscriptReload(qa.answer.id)}
-                            onManualTranscript={() => qa.answer?.id && handleManualTranscript(qa.answer.id, qa.answer.audioUrl)}
+                            onManualEntry={(answerId, transcript) => handleManualTranscript(answerId, qa.answer.audioUrl)}
                           />
                         </div>
                         

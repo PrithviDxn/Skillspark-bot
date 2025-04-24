@@ -447,7 +447,6 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [questionsByStack, availableTechStacks]);
 
-// Function to fetch questions for a specific tech stack
   const fetchQuestionsForStack = async (stackId: string) => {
     console.log('[DEBUG][InterviewContext] fetchQuestionsForStack called for stackId:', stackId);
     try {
@@ -460,7 +459,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   )
   .map((q: ApiQuestion) => ({
     id: q._id,
-    stackId: typeof q.techStack === 'object' ? q.techStack._id : q.techStack,
+    stackId: typeof q.techStack === 'object' && q.techStack !== null ? q.techStack._id : 
+            (typeof q.techStack === 'string' ? q.techStack : stackId),
     text: q.text,
     difficulty: q.difficulty
   }));

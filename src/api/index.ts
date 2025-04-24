@@ -79,6 +79,7 @@ export const interviewAPI = {
 // Answer endpoints
 export const answerAPI = {
   getByInterview: (interviewId: string) => api.get(`/answers?interview=${interviewId}`),
+  getById: (id: string) => api.get(`/answers/${id}`),
   create: (answerData: {
     interview: string;
     question: string;
@@ -176,6 +177,25 @@ export const uploadAPI = {
         // Removing explicit Content-Type - browser will set it correctly with boundary
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
+    }).then(response => {
+      // Process the response to make it easier to use
+      console.log('Upload API response:', response.data);
+      
+      // Extract the URL from the nested structure and normalize it
+      if (response.data?.success && response.data?.data?.fileUrl) {
+        // Create a normalized response with the URL at the top level
+        const normalizedResponse = {
+          ...response,
+          data: {
+            ...response.data,
+            url: response.data.data.fileUrl  // Add the URL at the top level
+          }
+        };
+        console.log('Normalized response:', normalizedResponse.data);
+        return normalizedResponse;
+      }
+      
+      return response;
     });
   }
 };
