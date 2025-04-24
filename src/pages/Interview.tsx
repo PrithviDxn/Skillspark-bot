@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 const MAX_QUESTION_TIME = 120;
 
 const Interview: React.FC = () => {
+  // All hooks at the top
   const { interviewId } = useParams<{ interviewId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -25,108 +26,83 @@ const Interview: React.FC = () => {
     saveAnswer,
     endInterview,
     useFreeMode,
-    availableTechStacks
+    availableTechStacks,
+    refreshInterview 
   } = useInterview();
-
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isAnswering, setIsAnswering] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
-// Store all answers locally for batch submission
-const [localAnswers, setLocalAnswers] = useState<any[]>([]);
+  const [localAnswers, setLocalAnswers] = useState<any[]>([]);
   const [showComplete, setShowComplete] = useState(false);
-  
-  // New states for enhanced features
   const [timeRemaining, setTimeRemaining] = useState(MAX_QUESTION_TIME);
   const [hasTimerStarted, setHasTimerStarted] = useState(false);
   const [timerWarning, setTimerWarning] = useState(false);
   const [autoSubmitCountdown, setAutoSubmitCountdown] = useState(0);
-  
-  // Refs
   const timerRef = useRef<number | null>(null);
   const autoSubmitRef = useRef<number | null>(null);
-
+  
+  // Format date/time - moved after all hook declarations
+  let formattedDate = '';
+  let formattedTime = '';
+  
+  // Try to fetch interview if not found
   useEffect(() => {
-    // Find the interview if we don't have it in state
-    // Debug logging
-    console.log('Interview page: interviewId:', interviewId);
-    console.log('Interview page: currentInterview:', currentInterview);
-    console.log('Interview page: interviews:', interviews);
-
     if (!currentInterview && interviewId) {
-      const interview = interviews.find(i => i.id === interviewId);
-      if (interview) {
-        setCurrentInterview(interview);
-        // Load questions for this stack
-        const loadedQuestions = getQuestionsForStack(interview.stackId);
-        setQuestions(loadedQuestions);
-        // Initialize answered questions
-        const answered = new Set<string>();
-        interview.answers.forEach(answer => {
-          answered.add(answer.questionId);
-        });
-        setAnsweredQuestions(answered);
-      } else {
-        // Try to fetch interview by ID from backend
-        if (typeof interviewId === 'string' && interviewId.length > 0 && typeof window !== 'undefined') {
-          if (typeof window.fetchInterviewAttempted === 'undefined') {
-            window.fetchInterviewAttempted = {};
-          }
-          if (!window.fetchInterviewAttempted[interviewId]) {
-            window.fetchInterviewAttempted[interviewId] = true;
-            if (typeof window.refreshInterview === 'function') {
-              window.refreshInterview(interviewId);
-            }
-          }
+      refreshInterview(interviewId).then(fetched => {
+        if (fetched) {
+          setCurrentInterview(fetched);
         }
-        // Show fallback UI
-        setQuestions([]);
-        setAnsweredQuestions(new Set());
-      }
-    } else if (currentInterview) {
-      // Load questions for this stack
-      const loadedQuestions = getQuestionsForStack(currentInterview.stackId);
-      setQuestions(loadedQuestions);
-      
-      // Initialize answered questions
-      const answered = new Set<string>();
-      currentInterview.answers.forEach(answer => {
-        answered.add(answer.questionId);
       });
-      setAnsweredQuestions(answered);
     }
-    
-    // Cleanup on unmount
-    return () => {
-      if (timerRef.current) {
-        window.clearInterval(timerRef.current);
+    if (currentInterview?.stackId && typeof getQuestionsForStack === 'function') {
+      const stackQuestions = getQuestionsForStack(currentInterview.stackId);
+      setQuestions(stackQuestions || []);
+    }
+    if (currentInterview?.scheduledDate) {
+      try {
+        const dateObj = new Date(currentInterview.scheduledDate);
+        formattedDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        formattedTime = dateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      } catch (error) {
+        formattedDate = 'Invalid date';
+        formattedTime = 'Invalid time';
       }
-      if (autoSubmitRef.current) {
-        window.clearInterval(autoSubmitRef.current);
-      }
-    };
-  }, [currentInterview, interviewId, interviews, setCurrentInterview, getQuestionsForStack, navigate]);
-
-  // Reset timer when changing questions
+    }
+  }, [currentInterview, interviewId, refreshInterview, setCurrentInterview, getQuestionsForStack]);
+  
+  // Add the autoSubmitCountdown effect here at the top level
   useEffect(() => {
-    setTimeRemaining(MAX_QUESTION_TIME);
-    setHasTimerStarted(false);
-    setTimerWarning(false);
-    setAutoSubmitCountdown(0);
-    
-    if (timerRef.current) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
+    if (autoSubmitCountdown > 0 && autoSubmitCountdown <= 5) {
+      const timer = setTimeout(() => {
+        setAutoSubmitCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (autoSubmitCountdown === 0 && isAnswering) {
+      // Only execute this if timer has actually run out (timeRemaining === 0)
+      // This check prevents the immediate auto-submit when starting to answer
+      if (timeRemaining === 0) {
+        handleRecordingComplete(new Blob(), '');
+      }
     }
-    
-    if (autoSubmitRef.current) {
-      window.clearInterval(autoSubmitRef.current);
-      autoSubmitRef.current = null;
-    }
-  }, [currentQuestionIndex]);
+  }, [autoSubmitCountdown, isAnswering, timeRemaining]);
+  
+  // Get the stackId for convenience
+  const stackId = currentInterview?.stackId;
+  
+  // Define currentQuestion at the top level after all hooks
+  const currentQuestion = questions[currentQuestionIndex] || null;
+  
+  // Define tech stack name and warning
+  const techStackName = currentInterview?.stackId ? 
+    availableTechStacks.find(stack => stack.id === currentInterview.stackId)?.name || 'Unknown' : 
+    'Loading...';
+  const techStackWarning = !availableTechStacks.some(stack => stack.id === currentInterview?.stackId) && currentInterview ? 
+    'Warning: This tech stack may not have questions available.' : 
+    '';
 
-  // Ensure the user has access to this interview
+  // Early returns
   if (!user) {
     return (
       <Layout>
@@ -140,7 +116,6 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
       </Layout>
     );
   }
-
   if (!currentInterview) {
     return (
       <Layout>
@@ -154,7 +129,6 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
       </Layout>
     );
   }
-
   if (user.role === 'user' && user._id !== currentInterview.candidateId) {
     return (
       <Layout>
@@ -168,35 +142,6 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
       </Layout>
     );
   }
-
-  const currentQuestion = questions[currentQuestionIndex];
-  // Lookup tech stack name
-  console.log('DEBUG: availableTechStacks:', availableTechStacks);
-  console.log('DEBUG: currentInterview.stackId:', currentInterview.stackId);
-  let techStackWarning = '';
-  let techStackName = '';
-
-  if (!techStackName && availableTechStacks && availableTechStacks.length > 0) {
-    const found = availableTechStacks.find(stack => stack.id === currentInterview.stackId);
-    if (found) {
-      techStackName = found.name;
-    } else {
-      techStackWarning = `Tech stack ID ${currentInterview.stackId} not found in availableTechStacks.`;
-    }
-  }
-  if (!techStackName) {
-    techStackName = currentInterview.stackId;
-  }
-  // Format scheduled date and time
-  let formattedDate = '';
-  let formattedTime = '';
-  if (currentInterview.scheduledDate) {
-    const dateObj = new Date(currentInterview.scheduledDate);
-    formattedDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    formattedTime = dateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  }
-  // Debug log for questions
-  console.log('Interview page: questions:', questions);
   if (!questions || questions.length === 0) {
     return (
       <Layout>
@@ -211,9 +156,8 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
     );
   }
 
-  
   const handleRecordingComplete = async (audioBlob: Blob, transcript?: string) => {
-    if (!currentInterview || !currentQuestion) return;
+    if (!currentInterview || !questions[currentQuestionIndex]) return;
     setIsSubmitting(true);
     try {
       // Stop the timer
@@ -221,20 +165,22 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
         window.clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      // Prepare answer object for local storage
+      // Use the currentQuestion defined at the top level
       const answerObj = {
         interview: currentInterview.id,
-        questionId: currentQuestion.id,
+        questionId: currentQuestion?.id || '',
         audioBlob,
         transcript,
-        questionText: currentQuestion.text
+        questionText: currentQuestion?.text || ''
       };
       setLocalAnswers(prev => {
         // Replace if already exists for this question
-        const filtered = prev.filter(a => a.questionId !== currentQuestion.id);
+        const filtered = prev.filter(a => a.questionId !== currentQuestion?.id);
         return [...filtered, answerObj];
       });
-      setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
+      if (currentQuestion?.id) {
+        setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
+      }
       if (currentQuestionIndex === questions.length - 1) {
         setShowComplete(true);
       } else {
@@ -416,22 +362,6 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
   // Calculate progress percentage
   const progressPercentage = (answeredQuestions.size / questions.length) * 100;
 
-  // First, find where we handle transcription during recording and add a mock warning
-  useEffect(() => {
-    if (autoSubmitCountdown > 0 && autoSubmitCountdown <= 5) {
-      const timer = setTimeout(() => {
-        setAutoSubmitCountdown(prev => prev - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else if (autoSubmitCountdown === 0 && isAnswering) {
-      // Only execute this if timer has actually run out (timeRemaining === 0)
-      // This check prevents the immediate auto-submit when starting to answer
-      if (timeRemaining === 0) {
-        handleRecordingComplete(new Blob(), '');
-      }
-    }
-  }, [autoSubmitCountdown, isAnswering, timeRemaining, handleRecordingComplete]);
-
   // Add a function to detect mock transcripts
   const isMockTranscript = (text?: string): boolean => {
     if (!text) return false;
@@ -475,25 +405,13 @@ const [localAnswers, setLocalAnswers] = useState<any[]>([]);
             {/* Interview Info for Candidate */}
             <div className="mb-6">
               <div className="mb-2 p-3 bg-gray-50 rounded-md border text-sm">
+                <div><span className="font-semibold">Candidate:</span> {currentInterview?.candidateName || 'You'}</div>
                 <div><span className="font-semibold">Tech Stack:</span> {techStackName}</div>
                 {techStackWarning && (
                   <div className="text-xs text-red-600 mt-1">{techStackWarning}</div>
                 )}
-                {/* DEBUG: List all availableTechStacks */}
-                <div className="mt-2 text-xs text-gray-400">
-                  <div>Debug: All Tech Stacks Loaded:</div>
-                  <ul>
-                    {availableTechStacks && availableTechStacks.length > 0 ? (
-                      availableTechStacks.map(stack => (
-                        <li key={stack.id}>{stack.id}: {stack.name}</li>
-                      ))
-                    ) : (
-                      <li>None loaded</li>
-                    )}
-                  </ul>
-                </div>
-                <div><span className="font-semibold">Scheduled Date:</span> {formattedDate}</div>
-                <div><span className="font-semibold">Scheduled Time:</span> {formattedTime}</div>
+                <div><span className="font-semibold">Scheduled Date:</span> {formattedDate || 'Not specified'}</div>
+                <div><span className="font-semibold">Scheduled Time:</span> {formattedTime || 'Not specified'}</div>
                 <div><span className="font-semibold">Duration:</span> {currentInterview.duration} min</div>
               </div>
               <div className="flex justify-between items-center mb-2">

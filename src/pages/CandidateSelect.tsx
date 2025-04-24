@@ -39,18 +39,13 @@ const CandidateSelect: React.FC = () => {
   }, [user, interviews]);
 
   // Helper to check if interview can be started now
+  // Always use scheduledDate (ISO) for logic, ignore scheduledTime for logic
   const canStart = (iv: any) => {
-    const { scheduledDate, scheduledTime } = getScheduledFields(iv);
+    const { scheduledDate } = getScheduledFields(iv);
     if (!scheduledDate) return false;
-    // Use actual local time
     const now = new Date();
-    let start: Date;
-    if (scheduledTime) {
-      start = new Date(`${scheduledDate}T${scheduledTime}`);
-    } else {
-      start = new Date(scheduledDate);
-    }
-    // Enable as soon as the scheduled start time is reached
+    const start = new Date(scheduledDate);
+    // Interview can be started if now is within the scheduled window (start to start+duration)
     return now >= start;
   };
 
@@ -114,12 +109,12 @@ const CandidateSelect: React.FC = () => {
     )
   }</span>
 </div>
-                      <div className="text-sm text-gray-600 mb-1">Scheduled Date: {scheduledDate}</div>
                       <div className="text-sm text-gray-600 mb-1">
-  Scheduled Time: {
-    scheduledTime || (scheduledDate ? new Date(scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')
-  }
-</div>
+                        Scheduled Date: {scheduledDate ? new Date(scheduledDate).toLocaleDateString() : ''}
+                      </div>
+                      <div className="text-sm text-gray-600 mb-1">
+                        Scheduled Time: {scheduledDate ? new Date(scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </div>
                       <div className="text-sm text-gray-600">Duration: {duration || 30} min</div>
                     </div>
                     <div className="mt-4 md:mt-0 md:ml-6">

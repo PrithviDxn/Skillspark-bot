@@ -73,10 +73,13 @@ const InterviewScheduler = () => {
         candidate: data.candidateId,
         techStack: data.techStackId,
         scheduledDate, // Send as full ISO string
+        scheduledTime: time, // Send as HH:mm string
         duration: 30 // Optional, default to 30 minutes
       };
 
       // Call the backend API to create the interview
+      // Debug: log payload
+      console.log('Interview creation payload:', payload);
       const response = await interviewAPI.create(payload);
       if (response.data && response.data.success && response.data.data) {
         toast.success('Interview scheduled successfully!');

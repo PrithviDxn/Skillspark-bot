@@ -369,11 +369,25 @@ interface ApiAnswer {
 }
 
 export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  console.log('[DEBUG][InterviewContext] Provider mounted');
   const [currentInterview, setCurrentInterview] = useState<Interview | null>(null);
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [availableTechStacks, setAvailableTechStacks] = useState<TechStack[]>([]);
   const [questionsByStack, setQuestionsByStack] = useState<Record<string, Question[]>>({});
+
+  useEffect(() => {
+    console.log('[DEBUG][InterviewContext] questionsByStack changed:', questionsByStack);
+    if (!questionsByStack || Object.keys(questionsByStack).length === 0) {
+      console.warn('[DEBUG][InterviewContext] questionsByStack is empty or undefined!', new Error().stack);
+    } else {
+      Object.entries(questionsByStack).forEach(([stackId, questions]) => {
+        const stackName = availableTechStacks.find(s => s.id === stackId)?.name || stackId;
+        console.log(`[DEBUG][InterviewContext] Stack: ${stackId} ${stackName}`);
+        console.log('[DEBUG][InterviewContext] Questions:', questions);
+      });
+    }
+  }, [questionsByStack, availableTechStacks]);
   const [useFreeMode, setUseFreeMode] = useState<boolean>(true); // Default to free mode
 
   // Fetch tech stacks and interviews on mount
@@ -400,6 +414,14 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         techStacks.forEach((stack: TechStack) => {
           fetchQuestionsForStack(stack.id);
         });
+        // Debug: Print each stack and its questions after a short delay to ensure fetches complete
+        setTimeout(() => {
+          techStacks.forEach((stack: TechStack) => {
+            console.log('[DEBUG][InterviewContext] Stack:', stack.id, stack.name);
+            console.log('[DEBUG][InterviewContext] Questions:', questionsByStack[stack.id]);
+          });
+        }, 1500); // Wait for fetches to likely complete
+
       }
     } catch (error) {
       console.error('Error fetching tech stacks:', error);
@@ -411,22 +433,46 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  // Function to fetch questions for a specific tech stack
+  // Debug: Print all questions for all stacks whenever questionsByStack changes
+  useEffect(() => {
+    console.log('[DEBUG][InterviewContext] questionsByStack changed:', questionsByStack);
+    if (!questionsByStack || Object.keys(questionsByStack).length === 0) {
+      console.warn('[DEBUG][InterviewContext] questionsByStack is empty or undefined!', new Error().stack);
+    } else {
+      Object.entries(questionsByStack).forEach(([stackId, questions]) => {
+        const stackName = availableTechStacks.find(s => s.id === stackId)?.name || stackId;
+        console.log(`[DEBUG][InterviewContext] Stack: ${stackId} ${stackName}`);
+        console.log('[DEBUG][InterviewContext] Questions:', questions);
+      });
+    }
+  }, [questionsByStack, availableTechStacks]);
+
+// Function to fetch questions for a specific tech stack
   const fetchQuestionsForStack = async (stackId: string) => {
+    console.log('[DEBUG][InterviewContext] fetchQuestionsForStack called for stackId:', stackId);
     try {
       const response = await questionAPI.getByTechStack(stackId);
+      console.log(`[fetchQuestionsForStack] API response for stackId ${stackId}:`, response.data);
       if (response.data && response.data.data) {
-        const questions = response.data.data.map((q: ApiQuestion) => ({
-          id: q._id,
-          stackId: q.techStack,
-          text: q.text,
-          difficulty: q.difficulty
-        }));
-        
-        setQuestionsByStack(prev => ({
-          ...prev,
-          [stackId]: questions
-        }));
+        const questions = response.data.data
+  .filter((q: ApiQuestion): q is ApiQuestion & { techStack: { _id: string } | string } =>
+    !!q.techStack && ((typeof q.techStack === 'object' && !!q.techStack._id) || typeof q.techStack === 'string')
+  )
+  .map((q: ApiQuestion) => ({
+    id: q._id,
+    stackId: typeof q.techStack === 'object' ? q.techStack._id : q.techStack,
+    text: q.text,
+    difficulty: q.difficulty
+  }));
+        console.log(`[fetchQuestionsForStack] Mapped questions for stackId ${stackId}:`, questions);
+        setQuestionsByStack(prev => {
+          const updated = {
+            ...prev,
+            [stackId]: questions
+          };
+          console.log(`[fetchQuestionsForStack] Updated questionsByStack for stackId ${stackId}:`, updated);
+          return updated;
+        });
       }
     } catch (error) {
       console.error(`Error fetching questions for stack ${stackId}:`, error);
@@ -441,7 +487,9 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const getQuestionsForStack = (stackId: string): Question[] => {
-    return questionsByStack[stackId] || [];
+    const result = questionsByStack[stackId] || [];
+    console.log('[DEBUG][InterviewContext] getQuestionsForStack called for stackId:', stackId, '->', result);
+    return result;
   };
 
   const startInterview = async (candidateId: string, stackId: string): Promise<Interview> => {
@@ -466,26 +514,21 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       
       const apiInterview = response.data.data;
-      
-      // Convert API format to our internal format
-      const newInterview: Interview = {
-        _id: apiInterview._id || apiInterview.id,
-        id: apiInterview._id || apiInterview.id,
-        candidateId: typeof apiInterview.candidate === 'object' ? apiInterview.candidate._id : apiInterview.candidate,
-        stackId: typeof apiInterview.techStack === 'object' ? apiInterview.techStack._id : apiInterview.techStack,
-        status: 'in-progress',
-        createdAt: apiInterview.createdAt,
-        completedAt: apiInterview.completedAt,
-        scheduledDate: apiInterview.scheduledDate,
-        scheduledTime: apiInterview.scheduledTime,
-        duration: apiInterview.duration,
-        answers: []
+      // Always fetch the latest interview data from the backend to ensure correct field mapping
+      const refreshed = await refreshInterview(apiInterview._id || apiInterview.id);
+      if (!refreshed) {
+        throw new Error('Failed to fetch interview after creation');
+      }
+      // Type guard: ensure stackId and candidateId are strings
+      const safeInterview = {
+        ...refreshed,
+        stackId: typeof refreshed.stackId === 'object' && refreshed.stackId !== null ? (refreshed.stackId._id || '') : refreshed.stackId,
+        candidateId: typeof refreshed.candidateId === 'object' && refreshed.candidateId !== null ? (refreshed.candidateId._id || '') : refreshed.candidateId,
       };
-      setInterviews(prev => [...prev, newInterview]);
-      setCurrentInterview(newInterview);
+      setInterviews(prev => [...prev, safeInterview]);
+      setCurrentInterview(safeInterview);
       toast.success('Interview started!');
-      
-      return newInterview;
+      return safeInterview;
     } catch (error) {
       console.error('Failed to start interview:', error);
       toast.error('Failed to start interview. Please try again.');
@@ -845,17 +888,21 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsLoading(true);
     try {
       // Get the interview details
+      console.log('[refreshInterview] Fetching interview for id:', interviewId);
       const interviewResponse = await interviewAPI.getById(interviewId);
+      console.log('[refreshInterview] interviewAPI.getById response:', interviewResponse.data);
       if (!interviewResponse.data || !interviewResponse.data.data) {
         throw new Error('Failed to fetch interview');
       }
       
       const apiInterview = interviewResponse.data.data as ApiInterview;
+      console.log('[refreshInterview] apiInterview:', apiInterview);
       
       // Convert to our internal format
+      // Debug: Map API interview to internal Interview type
+      console.log('[refreshInterview] Mapping apiInterview to Interview type');
       const formattedInterview: Interview = {
-        _id: apiInterview._id || apiInterview.id,
-        id: apiInterview._id || apiInterview.id,
+        id: apiInterview._id, // Use only _id from API
         candidateId: typeof apiInterview.candidate === 'object' ? apiInterview.candidate._id : apiInterview.candidate as string,
         stackId: typeof apiInterview.techStack === 'object' ? apiInterview.techStack._id : apiInterview.techStack as string,
         status: apiInterview.status as 'scheduled' | 'in-progress' | 'completed' | 'cancelled',
@@ -867,6 +914,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         answers: []
       };
       
+      console.log('[refreshInterview] Fetching answers for interview:', interviewId);
       // Fetch all answers for this interview
       try {
         const answersResponse = await answerAPI.getByInterview(interviewId);
