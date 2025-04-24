@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import AudioRecorder from '@/components/AudioRecorder';
 import { ArrowRight, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import FreeEvaluationService from '@/services/FreeEvaluationService';
 
 // Maximum time per question in seconds (2 minutes)
 const MAX_QUESTION_TIME = 120;
@@ -310,37 +311,55 @@ const Interview: React.FC = () => {
             toast.error('Audio upload failed for one of your answers.');
           }
         }
-        // 2. Transcribe
+        // 2. Use transcript from AudioRecorder component
         let transcript = local.transcript;
         if (!transcript && local.audioBlob) {
-          try {
-            const transRes = await aiAPI.transcribe(local.audioBlob);
-            transcript = transRes.data?.data;
-          } catch (err) {
-            transcript = '[TRANSCRIPTION FAILED]';
-            console.error('Transcription failed:', err);
-          }
+          // If transcript is missing but we have audio, use a placeholder
+          // The Web Speech API should have already provided the transcript
+          // but we'll handle the case where it might have failed
+          transcript = '[TRANSCRIPT FROM WEB SPEECH API NOT AVAILABLE]';
+          console.log('Using placeholder for missing transcript');
         }
-        // 3. Evaluate
+        
+        // Log the transcript for debugging
+        console.log('Using transcript:', transcript?.substring(0, 100) + (transcript?.length > 100 ? '...' : ''));
+        // 3. Evaluate using local FreeEvaluationService
         let score, feedback, criteria;
         if (transcript && local.questionText) {
           try {
-            const evalRes = await aiAPI.evaluate({
-              question: local.questionText,
+            console.log('Using FreeEvaluationService for evaluation');
+            const techStackName = availableTechStacks.find(s => s.id === currentInterview.stackId)?.name || '';
+            
+            // Use the local evaluation service
+            const evaluationResult = FreeEvaluationService.evaluateAnswer(
+              local.questionText,
               transcript,
-              techStack: (
-                availableTechStacks.find(s => s.id === currentInterview.stackId)?.name ||
-                undefined ||
-                undefined
-              )
+              techStackName
+            );
+            
+            score = evaluationResult.score;
+            feedback = evaluationResult.feedback;
+            criteria = evaluationResult.criteria;
+            
+            console.log('Local evaluation successful:', { 
+              score, 
+              criteriaKeys: Object.keys(criteria),
+              technicalAccuracy: criteria.technicalAccuracy,
+              completeness: criteria.completeness,
+              clarity: criteria.clarity,
+              examples: criteria.examples
             });
-            if (evalRes.data?.data) {
-              score = evalRes.data.data.score;
-              feedback = evalRes.data.data.feedback;
-              criteria = evalRes.data.data.criteria;
-            }
           } catch (err) {
-            console.error('Evaluation failed:', err);
+            console.error('Local evaluation failed:', err);
+            // Create a basic evaluation if the service fails
+            score = 5; // Default middle score
+            feedback = 'Your answer has been recorded, but automatic evaluation failed. An admin will review your response.';
+            criteria = {
+              technicalAccuracy: 5,
+              completeness: 5,
+              clarity: 5,
+              examples: 5
+            };
           }
         }
         batchAnswers.push({
@@ -354,13 +373,36 @@ const Interview: React.FC = () => {
         });
       }
       if (batchAnswers.length > 0) {
-        await answerAPI.batch(batchAnswers);
+        try {
+          await answerAPI.batch(batchAnswers);
+          console.log('Batch answers submitted successfully:', batchAnswers.length);
+        } catch (batchError) {
+          console.error('Failed to submit batch answers:', batchError);
+          toast.error('Some answers may not have been saved properly. Please contact support.');
+          
+          // Try to submit answers one by one as fallback
+          for (const answer of batchAnswers) {
+            try {
+              await answerAPI.create(answer);
+              console.log('Individual answer submitted successfully:', answer.question);
+            } catch (singleError) {
+              console.error('Failed to submit individual answer:', singleError);
+            }
+          }
+        }
       }
-      await endInterview(currentInterview.id);
-      toast.success('Interview submitted successfully!');
-      if (user.role === 'admin') {
-        navigate(`/admin/report/${currentInterview.id}`);
-      } else {
+      
+      try {
+        await endInterview(currentInterview.id);
+        toast.success('Interview submitted successfully!');
+        if (user.role === 'admin') {
+          navigate(`/admin/report/${currentInterview.id}`);
+        } else {
+          navigate('/');
+        }
+      } catch (endError) {
+        console.error('Failed to end interview:', endError);
+        toast.error('Failed to mark interview as completed, but your answers were saved.');
         navigate('/');
       }
     } catch (error) {

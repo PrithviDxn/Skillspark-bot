@@ -587,29 +587,16 @@ const InterviewReport: React.FC = () => {
   return (
     <Layout>
       <div className="container mx-auto py-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center">
-            <Button 
-              variant="ghost" 
-              className="mr-2"
-              onClick={handleBack}
-            >
-              <ChevronLeft className="mr-1" size={16} />
-              Back
-            </Button>
-            <h1 className="text-2xl font-bold">Interview Report</h1>
-          </div>
-          <div className="flex space-x-2">
-            <Button variant="outline" size="sm" onClick={() => console.log('Debug clicked')}>
-              Show Debug
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => fetchInterviewData()}>
-              <RefreshCw className="mr-1" size={14} /> Refresh Data
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => fetchInterviewData()}>
-              Force Complete Reload
-            </Button>
-          </div>
+        <div className="flex items-center mb-6">
+          <Button 
+            variant="ghost" 
+            className="mr-2"
+            onClick={handleBack}
+          >
+            <ChevronLeft className="mr-1" size={16} />
+            Back to Dashboard
+          </Button>
+          <h1 className="text-2xl font-bold">Interview Report</h1>
         </div>
         
         {loading ? (
@@ -622,118 +609,63 @@ const InterviewReport: React.FC = () => {
           </div>
         ) : interview ? (
           <>
-            <div className="mb-8">
-              {/* Get tech stack name from availableTechStacks */}
-              <h1 className="text-3xl font-bold mb-2">
-                {availableTechStacks.find(stack => stack.id === interview.stackId)?.name || 'Technical'} Interview Report
-              </h1>
-              <div className="flex items-center space-x-4 text-gray-600 mb-2">
-                <div className="flex items-center">
-                  <Calendar className="mr-1" size={16} />
-                  <span>{new Date(interview.scheduledDate).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}, {interview.scheduledTime}</span>
-                </div>
-                <div className="flex items-center">
-                  <Clock className="mr-1" size={16} />
-                  <span>{interview.status.charAt(0).toUpperCase() + interview.status.slice(1).replace('-', ' ')}</span>
-                </div>
-              </div>
-              <div className="flex items-center text-gray-600">
-                <User className="mr-1" size={16} />
-                {/* We don't have candidate name in the context, so we'll show a formatted ID */}
-                <span>Candidate {interview.candidateId.substring(0, 8)}</span>
-              </div>
-            </div>
-
-            <Card className="mb-8">
+            <Card className="mb-6">
               <CardHeader>
-                <CardTitle>Interview Performance Summary</CardTitle>
+                <CardTitle>Interview Summary</CardTitle>
                 <CardDescription>
-                  Overall assessment of the candidate's performance in this interview
+                  Overview of the interview performance
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-6 mb-8">
-                  <div className="text-center p-6 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 mb-2">Questions</div>
-                    <div className="text-4xl font-bold">{questionsWithAnswers.length}</div>
-                  </div>
-                  <div className="text-center p-6 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 mb-2">Answered</div>
-                    <div className="text-4xl font-bold">{questionsWithAnswers.filter(qa => qa.answer).length}</div>
-                  </div>
-                  <div className="text-center p-6 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 mb-2">Average Score</div>
-                    <div className="text-4xl font-bold">
-                      {averageScore !== null ? averageScore : 'N/A'}
-                      <span className="text-lg"> / 10</span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="flex items-center">
+                    <Calendar className="mr-2 text-gray-500" size={20} />
+                    <div>
+                      <p className="text-sm text-gray-500">Date</p>
+                      <p className="font-medium">{interview.scheduledDate}</p>
                     </div>
-                    <div className="text-sm mt-1 text-red-600 font-medium">
-                      {averageScore !== null && averageScore < 5 ? 'Needs Improvement' : 
-                       averageScore !== null && averageScore < 7 ? 'Average' : 'Good'}
+                  </div>
+                  <div className="flex items-center">
+                    <Clock className="mr-2 text-gray-500" size={20} />
+                    <div>
+                      <p className="text-sm text-gray-500">Duration</p>
+                      <p className="font-medium">{interview.duration} minutes</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <User className="mr-2 text-gray-500" size={20} />
+                    <div>
+                      <p className="text-sm text-gray-500">Status</p>
+                      <p className="font-medium capitalize">{interview.status}</p>
                     </div>
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h3 className="text-lg font-medium mb-4">Performance by Criteria</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg" style={{ height: '280px' }}>
-                      {criteriaAverages && criteriaAverages.length > 0 ? (
-                        <div className="h-full">
-                          <RadarChartDisplay data={criteriaAverages} />
+                    <h3 className="text-lg font-medium mb-3">Overall Score</h3>
+                    <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-5xl font-bold mb-2">
+                          {averageScore !== null ? averageScore : 'N/A'}
+                          {averageScore !== null && <span className="text-lg">/10</span>}
                         </div>
+                        <p className="text-sm text-gray-500">Average score across all questions</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-lg font-medium mb-3">Criteria Breakdown</h3>
+                    <div className="bg-gray-100 p-4 rounded-lg" style={{ height: '200px' }}>
+                      {criteriaAverages && criteriaAverages.length > 0 ? (
+                        <RadarChartDisplay data={criteriaAverages} />
                       ) : (
                         <div className="h-full flex items-center justify-center text-gray-500">
                           <p>No criteria data available</p>
                         </div>
                       )}
                     </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-lg font-medium mb-4">Strengths</h3>
-                    <ul className="space-y-2">
-                      {averageScore && averageScore > 3 ? (
-                        <>
-                          <li className="flex items-start">
-                            <CheckCircle className="text-green-500 mr-2 mt-1" size={16} />
-                            <span>Provided a comprehensive answer addressing all parts of the question</span>
-                          </li>
-                          <li className="flex items-start">
-                            <CheckCircle className="text-green-500 mr-2 mt-1" size={16} />
-                            <span>Explanation was generally understandable</span>
-                          </li>
-                          <li className="flex items-start">
-                            <CheckCircle className="text-green-500 mr-2 mt-1" size={16} />
-                            <span>Used some examples to support the explanation</span>
-                          </li>
-                        </>
-                      ) : (
-                        <li className="text-gray-500">No significant strengths identified</li>
-                      )}
-                    </ul>
-                    
-                    <h3 className="text-lg font-medium mt-6 mb-4">Areas for Improvement</h3>
-                    <ul className="space-y-2">
-                      {averageScore && averageScore < 7 ? (
-                        <>
-                          <li className="flex items-start">
-                            <XCircle className="text-red-500 mr-2 mt-1" size={16} />
-                            <span>Technical accuracy needs significant improvement</span>
-                          </li>
-                          <li className="flex items-start">
-                            <XCircle className="text-red-500 mr-2 mt-1" size={16} />
-                            <span>Could improve clarity with better structure and transitions</span>
-                          </li>
-                          <li className="flex items-start">
-                            <XCircle className="text-red-500 mr-2 mt-1" size={16} />
-                            <span>Lacked examples to illustrate the concepts</span>
-                          </li>
-                        </>
-                      ) : (
-                        <li className="text-gray-500">No significant areas for improvement identified</li>
-                      )}
-                    </ul>
                   </div>
                 </div>
               </CardContent>
