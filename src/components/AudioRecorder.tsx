@@ -81,6 +81,11 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const latestTranscriptRef = useRef<string>('');
+
+  useEffect(() => {
+    latestTranscriptRef.current = transcript;
+  }, [transcript]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -203,10 +208,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(audioBlob);
         setAudioURL(url);
+        console.log('url audio', url);
         
-        // Pass both the audio blob and transcript to the parent component
-        console.log('Recording complete. Transcript:', transcript);
-        onRecordingComplete(audioBlob, transcript);
+        // Use the latest transcript from the ref instead of the state
+        // This ensures we get the most up-to-date transcript value
+        const finalTranscript = latestTranscriptRef.current || "[TRANSCRIPT FROM WEB SPEECH API NOT AVAILABLE]";
+        console.log('Recording complete. Latest transcript from ref:', finalTranscript);
+        onRecordingComplete(audioBlob, finalTranscript);
       };
       
       mediaRecorderRef.current.start();
