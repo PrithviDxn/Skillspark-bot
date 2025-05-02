@@ -77,7 +77,7 @@ export const evaluateAnswer = async (req, res, next) => {
 
     // Create evaluation prompt for Cohere
     const prompt = `
-    As an expert interviewer in ${techStack || 'technology'}, evaluate the following answer to this technical question. You must be strict and fair in your evaluation.
+    As an expert interviewer in ${techStack || 'technology'}, evaluate the following answer to this technical question. You must be extremely strict and fair in your evaluation.
     
     Question: ${question}
     
@@ -89,11 +89,16 @@ export const evaluateAnswer = async (req, res, next) => {
     \`\`\`
     ` : ''}
     
-    IMPORTANT EVALUATION GUIDELINES:
-    1. RELEVANCE CHECK: First, determine if the answer is relevant to the question. If the answer is completely irrelevant or just a greeting without addressing the technical question, assign a score of 1-3 and explain why.
-    2. COMPLETENESS CHECK: Assess whether the answer covers the key concepts required to answer the question. Missing important concepts should significantly reduce the score.
-    3. TECHNICAL ACCURACY: Verify that the technical information provided is correct. Inaccurate information should result in a lower score.
-    4. LENGTH CHECK: Very short answers (less than 50 words) that don't adequately address the question should receive a low score (1-4).
+    CRITICAL EVALUATION INSTRUCTIONS:
+    1. RELEVANCE CHECK (MOST IMPORTANT): First, determine if the answer is relevant to the question. 
+       - If the answer is completely irrelevant, just a greeting, or merely states the candidate's name without addressing the technical question, you MUST assign a score of 1/10 for ALL criteria (technicalAccuracy, completeness, clarity, examples) and an overall score of 1/10.
+       - Feedback should clearly state that the answer is irrelevant to the technical question asked.
+    
+    2. COMPLETENESS CHECK: For relevant answers, assess whether the answer covers the key concepts required. Missing important concepts should significantly reduce the score.
+    
+    3. TECHNICAL ACCURACY: For relevant answers, verify that the technical information provided is correct. Inaccurate information should result in a lower score.
+    
+    4. LENGTH CHECK: Very short answers (less than 50 words) that don't adequately address the question should receive a low score (1-2).
     
     Evaluate this answer based on:
     1. Technical accuracy (40%)
@@ -101,8 +106,9 @@ export const evaluateAnswer = async (req, res, next) => {
     3. Clarity of explanation (20%)
     4. Example usage (10%)
     
-    SCORING GUIDELINES:
-    1-3: Poor or irrelevant answer
+    STRICT SCORING GUIDELINES:
+    1: Completely irrelevant or just a greeting
+    2-3: Poor answer with major gaps or errors
     4-5: Basic answer with significant gaps
     6-7: Good answer with minor gaps
     8-10: Excellent, comprehensive answer
@@ -110,7 +116,7 @@ export const evaluateAnswer = async (req, res, next) => {
     Provide your evaluation in JSON format with the following structure:
     {
       "score": (a number between 1-10),
-      "feedback": (detailed feedback including strengths and areas for improvement),
+      "feedback": (detailed feedback including why the score was given and areas for improvement),
       "criteria": {
         "technicalAccuracy": (score out of 10),
         "completeness": (score out of 10),
@@ -265,16 +271,17 @@ const createFallbackEvaluation = (question, transcript, techStack, code) => {
   const isJustGreeting = normalizedTranscript.match(/^\s*(hi|hello|hey|greetings|my name is)\b.*?$/i);
   const wordCount = normalizedTranscript.split(/\s+/).filter(w => w.length > 0).length;
   const isVeryShort = wordCount < 20;
+  const isTesting = normalizedTranscript.toLowerCase().includes('testing') || normalizedTranscript.toLowerCase().includes('test');
   
-  // If it's just a greeting or very short, give a low score
-  if (isJustGreeting || isVeryShort) {
+  // If it's just a greeting, testing message, or very short, give a score of 1
+  if (isJustGreeting || isVeryShort || isTesting) {
     return {
-      score: 2,
-      feedback: `This answer is ${isJustGreeting ? 'just a greeting' : 'too short'} and does not address the technical question. A complete answer should explain the technical concepts in detail.`,
+      score: 1,
+      feedback: `This answer is ${isJustGreeting ? 'just a greeting' : isTesting ? 'just a test message' : 'too short'} and does not address the technical question. A complete answer should explain the technical concepts in detail. Irrelevant answers receive a score of 1/10.`,
       criteria: {
         technicalAccuracy: 1,
         completeness: 1,
-        clarity: 2,
+        clarity: 1,
         examples: 1
       }
     };
