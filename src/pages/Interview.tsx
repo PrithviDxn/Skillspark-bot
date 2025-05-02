@@ -7,9 +7,9 @@ import Layout from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import AudioRecorder from '@/components/AudioRecorder';
-import { ArrowRight, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import CodeEditor from '@/components/CodeEditor';
+import { ArrowRight, CheckCircle, Clock, AlertCircle, Code } from 'lucide-react';
 import { toast } from 'sonner';
-import FreeEvaluationService from '@/services/FreeEvaluationService';
 
 // Maximum time per question in seconds (2 minutes)
 const MAX_QUESTION_TIME = 120;
@@ -41,6 +41,9 @@ const Interview: React.FC = () => {
   const [hasTimerStarted, setHasTimerStarted] = useState(false);
   const [timerWarning, setTimerWarning] = useState(false);
   const [autoSubmitCountdown, setAutoSubmitCountdown] = useState(0);
+  const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const [code, setCode] = useState('');
+  const [codeLanguage, setCodeLanguage] = useState('javascript');
   const timerRef = useRef<number | null>(null);
   const autoSubmitRef = useRef<number | null>(null);
   
@@ -201,39 +204,122 @@ const Interview: React.FC = () => {
   }
 
   const handleRecordingComplete = async (audioBlob: Blob, transcript?: string) => {
-    if (!currentInterview || !questions[currentQuestionIndex]) return;
+    if (!currentInterview || !currentQuestion) return;
+    
     setIsSubmitting(true);
+    
     try {
-      // Use the currentQuestion defined at the top level
-      const answerObj = {
-        interview: currentInterview.id,
-        questionId: currentQuestion?.id || '',
-        audioBlob,
-        transcript,
-        questionText: currentQuestion?.text || ''
-      };
+      console.log('Recording complete with transcript:', transcript);
       
-      // Store the answer but don't move to next question
-      setLocalAnswers(prev => {
-        // Replace if already exists for this question
-        const filtered = prev.filter(a => a.questionId !== currentQuestion?.id);
-        return [...filtered, answerObj];
-      });
+      // Check if transcript is empty or contains the placeholder text
+      const actualTranscript = transcript && !transcript.includes('[TRANSCRIPT FROM WEB SPEECH API NOT AVAILABLE]') 
+        ? transcript 
+        : '';
+        
+      console.log('Using transcript:', actualTranscript);
       
-      // Mark as answered but don't change any other state
-      if (currentQuestion?.id) {
-        setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
+      // Upload the audio file to get a URL
+      let audioUrl = '';
+      try {
+        const uploadResponse = await uploadAPI.uploadAudio(audioBlob);
+        audioUrl = uploadResponse.data.data.fileUrl;
+        console.log('Audio uploaded successfully:', audioUrl);
+      } catch (uploadError) {
+        console.error('Error uploading audio:', uploadError);
+        toast.error('Failed to upload audio');
       }
       
-      // Show a success message
-      toast.success('Response recorded! You can re-record or move to the next question.');
+      // If we have a transcript and code, send to AI for evaluation
+      let aiEvaluation = null;
+      if (actualTranscript || (showCodeEditor && code)) {
+        try {
+          console.log('Sending to AI for evaluation:', {
+            question: currentQuestion.text,
+            transcript: actualTranscript,
+            techStack: currentInterview.stackName,
+            code: showCodeEditor ? code : undefined,
+            codeLanguage: codeLanguage
+          });
+          
+          const evaluationResponse = await aiAPI.evaluate({
+            question: currentQuestion.text,
+            transcript: actualTranscript || 'No verbal response provided.',
+            techStack: currentInterview.stackName,
+            code: showCodeEditor ? code : undefined,
+            codeLanguage: codeLanguage
+          });
+          
+          aiEvaluation = evaluationResponse.data.data;
+          console.log('AI evaluation received:', aiEvaluation);
+        } catch (aiError) {
+          console.error('Error getting AI evaluation:', aiError);
+          toast.error('Failed to get AI evaluation');
+        }
+      }
       
-      // Don't stop the timer or change question - let the user decide when to move on
+      // Save the answer to the database
+      try {
+        await saveAnswer({
+          interview: currentInterview.id,
+          question: currentQuestion.id,
+          audioUrl,
+          transcript: actualTranscript,
+          code: showCodeEditor ? code : '',
+          codeLanguage,
+          ...(aiEvaluation ? {
+            score: aiEvaluation.score,
+            feedback: aiEvaluation.feedback,
+            criteria: aiEvaluation.criteria
+          } : {})
+        });
+        console.log('Answer saved to database');
+      } catch (saveError) {
+        console.error('Error saving answer to database:', saveError);
+      }
+      
+      // Create a local answer object to display immediately
+      const localAnswer = {
+        id: Date.now().toString(),
+        questionId: currentQuestion.id,
+        questionText: currentQuestion.text,
+        audioBlob,
+        audioUrl: URL.createObjectURL(audioBlob),
+        transcript: actualTranscript,
+        code: showCodeEditor ? code : '',
+        codeLanguage: codeLanguage,
+        score: aiEvaluation?.score || null,
+        feedback: aiEvaluation?.feedback || null,
+        criteria: aiEvaluation?.criteria || null
+      };
+      
+      // Add to local answers array
+      setLocalAnswers(prev => {
+        // Replace if already exists for this question
+        const filtered = prev.filter(a => a.questionId !== currentQuestion.id);
+        return [...filtered, localAnswer];
+      });
+      
+      // Mark this question as answered
+      setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
+      
+      // Save progress to sessionStorage
+      const progress = {
+        questionIndex: currentQuestionIndex,
+        answeredQuestions: Array.from(answeredQuestions).concat(currentQuestion.id)
+      };
+      sessionStorage.setItem(`interview-progress-${interviewId}`, JSON.stringify(progress));
+      localStorage.setItem(`interview-progress-${interviewId}`, JSON.stringify(progress));
+      
+      toast.success('Answer recorded and evaluated! You can continue editing your code or move to the next question when ready.');
     } catch (error) {
-      console.error('Failed to store answer:', error);
-      toast.error('Failed to store answer locally. Please try again.');
+      console.error('Error saving answer:', error);
+      toast.error('Failed to save answer');
     } finally {
       setIsSubmitting(false);
+      // Don't automatically end answering or clear the code editor
+      // setIsAnswering(false);
+      // setShowCodeEditor(false);
+      // setCode('');
     }
   };
 
@@ -339,7 +425,7 @@ const Interview: React.FC = () => {
           console.log('[DEBUG] Using transcript:', transcript.substring(0, 100) + (transcript.length > 100 ? '...' : ''));
         }
         
-        // 3. Evaluate using local FreeEvaluationService
+        // 3. Evaluate using Cohere AI
         let score = 0, feedback = '';
         let criteria: { technicalAccuracy: number; completeness: number; clarity: number; examples: number } = {
           technicalAccuracy: 0,
@@ -349,28 +435,33 @@ const Interview: React.FC = () => {
         };
         if (transcript && local.questionText) {
           try {
-            console.log('[DEBUG] Using FreeEvaluationService for evaluation');
+            console.log('[DEBUG] Using Cohere AI for evaluation');
             const techStackName = availableTechStacks.find(s => s.id === currentInterview.stackId)?.name || '';
             
-            // Use the local evaluation service
-            const evaluationResult = FreeEvaluationService.evaluateAnswer(
-              local.questionText,
-              transcript,
-              techStackName
-            );
-            
-            score = evaluationResult.score;
-            feedback = evaluationResult.feedback;
-            criteria = evaluationResult.criteria;
-            
-            console.log('[DEBUG] Local evaluation successful:', { 
-              score, 
-              criteriaKeys: Object.keys(criteria),
-              technicalAccuracy: criteria.technicalAccuracy,
-              completeness: criteria.completeness,
-              clarity: criteria.clarity,
-              examples: criteria.examples
+            // Use the AI API for evaluation
+            const evaluationResponse = await aiAPI.evaluate({
+              question: local.questionText,
+              transcript: transcript,
+              techStack: techStackName,
+              code: local.code || '',
+              codeLanguage: local.codeLanguage || 'javascript'
             });
+            
+            if (evaluationResponse.data && evaluationResponse.data.data) {
+              const evaluation = evaluationResponse.data.data;
+              score = evaluation.score;
+              feedback = evaluation.feedback;
+              criteria = evaluation.criteria;
+              
+              console.log('[DEBUG] Cohere AI evaluation successful:', { 
+                score, 
+                criteriaKeys: Object.keys(criteria),
+                technicalAccuracy: criteria.technicalAccuracy,
+                completeness: criteria.completeness,
+                clarity: criteria.clarity,
+                examples: criteria.examples
+              });
+            }
           } catch (err) {
             console.error('Local evaluation failed:', err);
             // Create a basic evaluation if the service fails
@@ -392,6 +483,8 @@ const Interview: React.FC = () => {
           question: local.questionId,
           audioUrl,
           transcript,
+          code: local.code || '',
+          codeLanguage: local.codeLanguage || 'javascript',
           score,
           feedback,
           criteria
@@ -610,18 +703,34 @@ const Interview: React.FC = () => {
                       isDisabled={isSubmitting}
                       useSpeechRecognition={useFreeMode}
                     />
-                    <div className="mt-4 flex justify-between">
+                    
+                    <div className="mt-4 flex items-center justify-between">
                       <Button 
                         variant="outline" 
-                        onClick={() => {
-                          // Reset recording state but keep timer running
-                          setIsAnswering(false);
-                          setTimeout(() => setIsAnswering(true), 100);
-                        }}
+                        onClick={() => setShowCodeEditor(!showCodeEditor)}
                         disabled={isSubmitting}
+                        className="flex items-center gap-2"
                       >
-                        Re-record Response
+                        <Code size={16} />
+                        {showCodeEditor ? 'Hide Code Editor' : 'Show Code Editor'}
                       </Button>
+                    </div>
+                    
+                    {showCodeEditor && (
+                      <div className="mt-4">
+                        <CodeEditor
+                          initialValue={code}
+                          onChange={setCode}
+                          language={codeLanguage}
+                          onSave={(value) => {
+                            setCode(value);
+                            toast.success('Code saved!');
+                          }}
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="mt-4 flex justify-end">
                       <Button 
                         variant="outline" 
                         onClick={handleNextQuestion}

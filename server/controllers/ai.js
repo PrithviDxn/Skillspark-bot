@@ -58,15 +58,17 @@ export const transcribeAudio = async (req, res, next) => {
 // @access  Private
 export const evaluateAnswer = async (req, res, next) => {
   try {
-    const { question, transcript, techStack } = req.body;
+    const { question, transcript, techStack, code, codeLanguage } = req.body;
 
-    if (!question || !transcript) {
-      return next(new ErrorResponse('Please provide both question and transcript', 400));
+    if (!question || (!transcript && !code)) {
+      return next(new ErrorResponse('Please provide question and either transcript or code', 400));
     }
 
     console.log('\n🔍🔍🔍 EVALUATION USING COHERE AI 🔍🔍🔍');
     console.log('Question:', question.substring(0, 100) + '...');
-    console.log('Transcript length:', transcript.length);
+    console.log('Transcript length:', transcript ? transcript.length : 'No transcript');
+    console.log('Code provided:', !!code);
+    console.log('Code language:', codeLanguage || 'Not specified');
     console.log('Tech Stack:', techStack || 'Not specified');
     console.log('Cohere API Key available:', !!process.env.COHERE_API_KEY);
     console.log('Cohere API Key:', process.env.COHERE_API_KEY ? process.env.COHERE_API_KEY.substring(0, 5) + '...' : 'Not set');
@@ -75,17 +77,35 @@ export const evaluateAnswer = async (req, res, next) => {
 
     // Create evaluation prompt for Cohere
     const prompt = `
-    As an expert interviewer in ${techStack || 'technology'}, evaluate the following answer to this technical question.
+    As an expert interviewer in ${techStack || 'technology'}, evaluate the following answer to this technical question. You must be strict and fair in your evaluation.
     
     Question: ${question}
     
-    Answer transcript: ${transcript}
+    ${transcript ? `Answer transcript: ${transcript}` : 'No verbal answer was provided.'}
+    ${code ? `
+    Code submission (${codeLanguage || 'javascript'}):
+    \`\`\`${codeLanguage || 'javascript'}
+    ${code}
+    \`\`\`
+    ` : ''}
+    
+    IMPORTANT EVALUATION GUIDELINES:
+    1. RELEVANCE CHECK: First, determine if the answer is relevant to the question. If the answer is completely irrelevant or just a greeting without addressing the technical question, assign a score of 1-3 and explain why.
+    2. COMPLETENESS CHECK: Assess whether the answer covers the key concepts required to answer the question. Missing important concepts should significantly reduce the score.
+    3. TECHNICAL ACCURACY: Verify that the technical information provided is correct. Inaccurate information should result in a lower score.
+    4. LENGTH CHECK: Very short answers (less than 50 words) that don't adequately address the question should receive a low score (1-4).
     
     Evaluate this answer based on:
     1. Technical accuracy (40%)
     2. Completeness (30%)
     3. Clarity of explanation (20%)
     4. Example usage (10%)
+    
+    SCORING GUIDELINES:
+    1-3: Poor or irrelevant answer
+    4-5: Basic answer with significant gaps
+    6-7: Good answer with minor gaps
+    8-10: Excellent, comprehensive answer
     
     Provide your evaluation in JSON format with the following structure:
     {
@@ -105,6 +125,7 @@ export const evaluateAnswer = async (req, res, next) => {
       console.log('- Model: command');
       console.log('- Temperature: 0.3');
       console.log('- Max Tokens: 800');
+      console.log('- Prompt preview:', prompt.substring(0, 200) + '...');
       
       // Call Cohere API
       try {
@@ -114,31 +135,46 @@ export const evaluateAnswer = async (req, res, next) => {
           model: 'command',  // Using Cohere's command model
           temperature: 0.3,
           maxTokens: 800,
-          returnLikelihoods: 'NONE',
         });
+
+        console.log('Cohere API response received!');
+        console.log('Response status:', cohereResponse?.statusCode || 'Unknown');
         
-        console.log('Cohere API request successful!');
-        console.log('Response object keys:', Object.keys(cohereResponse));
-        console.log('Has generations array:', !!cohereResponse.generations);
-        console.log('Generations array length:', cohereResponse.generations?.length || 0);
-
-        // Extract the generated text
+        if (!cohereResponse.generations || cohereResponse.generations.length === 0) {
+          throw new Error('No generations returned from Cohere API');
+        }
+        
         const generatedText = cohereResponse.generations[0].text;
-        console.log('\n✅✅✅ COHERE AI EVALUATION SUCCESSFUL ✅✅✅');
-        console.log('Response length:', generatedText.length);
-        console.log('First 100 chars:', generatedText.substring(0, 100) + '...');
-        console.log('Last 100 chars:', generatedText.substring(generatedText.length - 100) + '...');
+        console.log('Generated text length:', generatedText.length);
+        console.log('Generated text preview:', generatedText.substring(0, 100) + '...');
+        
+        // Try to extract JSON from the response
+        const jsonRegex = /{[\s\S]*}/g;
+        const jsonMatch = generatedText.match(jsonRegex);
+        console.log('JSON match found:', !!jsonMatch);
+        
+        let evaluationResponse;
 
-      // Extract the JSON part from the response
-      let jsonMatch = generatedText.match(/\{[\s\S]*\}/m);
-      let evaluationResponse;
-
-      if (jsonMatch) {
-        try {
-          evaluationResponse = JSON.parse(jsonMatch[0]);
-        } catch (jsonError) {
-          console.error('Error parsing JSON from Cohere response:', jsonError);
-          // Fallback to a structured response if JSON parsing fails
+        if (jsonMatch) {
+          try {
+            evaluationResponse = JSON.parse(jsonMatch[0]);
+            console.log('Successfully parsed JSON response:', evaluationResponse);
+          } catch (jsonError) {
+            console.error('Error parsing JSON from Cohere response:', jsonError);
+            // Fallback to a structured response if JSON parsing fails
+            evaluationResponse = {
+              score: 5,
+              feedback: generatedText,
+              criteria: {
+                technicalAccuracy: 5,
+                completeness: 5,
+                clarity: 5,
+                examples: 5
+              }
+            };
+          }
+        } else {
+          // If no JSON found, create a structured response from the text
           evaluationResponse = {
             score: 5,
             feedback: generatedText,
@@ -150,25 +186,12 @@ export const evaluateAnswer = async (req, res, next) => {
             }
           };
         }
-      } else {
-        // If no JSON found, create a structured response from the text
-        evaluationResponse = {
-          score: 5,
-          feedback: generatedText,
-          criteria: {
-            technicalAccuracy: 5,
-            completeness: 5,
-            clarity: 5,
-            examples: 5
-          }
-        };
-      }
 
-      res.status(200).json({
-        success: true,
-        data: evaluationResponse,
-        evaluationMethod: 'cohere'
-      });
+        res.status(200).json({
+          success: true,
+          data: evaluationResponse,
+          evaluationMethod: 'cohere'
+        });
       } catch (innerError) {
         console.error('Error accessing Cohere response:', innerError);
         throw innerError; // Re-throw to be caught by the outer catch block
@@ -181,7 +204,7 @@ export const evaluateAnswer = async (req, res, next) => {
       console.log('Falling back to local evaluation method');
       
       // Fallback to FreeEvaluationService-like logic if Cohere fails
-      const fallbackEvaluation = createFallbackEvaluation(question, transcript, techStack);
+      const fallbackEvaluation = createFallbackEvaluation(question, transcript, techStack, code);
       
       res.status(200).json({
         success: true,
@@ -197,43 +220,136 @@ export const evaluateAnswer = async (req, res, next) => {
 };
 
 // Simple fallback evaluation function if Cohere API fails
-const createFallbackEvaluation = (question, transcript, techStack) => {
-  // Very simple keyword-based evaluation
-  const keywords = [
-    // General technical terms
+const createFallbackEvaluation = (question, transcript, techStack, code) => {
+  // Extract question-specific keywords from the question
+  const questionLower = question.toLowerCase();
+  let questionKeywords = [];
+  
+  // Add question-specific keywords based on the question content
+  if (questionLower.includes('react')) {
+    questionKeywords = ['component', 'jsx', 'virtual dom', 'state', 'props', 'hooks', 'lifecycle', 'render'];
+  } else if (questionLower.includes('node')) {
+    questionKeywords = ['event loop', 'callback', 'async', 'express', 'middleware', 'server'];
+  } else if (questionLower.includes('python')) {
+    questionKeywords = ['list', 'tuple', 'dictionary', 'class', 'function', 'django', 'flask'];
+  } else if (questionLower.includes('java')) {
+    questionKeywords = ['class', 'interface', 'inheritance', 'polymorphism', 'spring'];
+  }
+  
+  // General technical terms
+  const generalKeywords = [
     'algorithm', 'performance', 'optimization', 'design', 'pattern',
-    'architecture', 'framework', 'library', 'function', 'method',
-    
-    // Tech stack specific terms
-    ...(techStack?.toLowerCase().includes('react') ? 
-      ['component', 'jsx', 'virtual dom', 'state', 'props', 'hooks'] : []),
-    ...(techStack?.toLowerCase().includes('node') ? 
-      ['event loop', 'callback', 'async', 'express', 'middleware'] : []),
-    ...(techStack?.toLowerCase().includes('python') ? 
-      ['list', 'tuple', 'dictionary', 'class', 'function', 'django', 'flask'] : []),
-    ...(techStack?.toLowerCase().includes('java') ? 
-      ['class', 'interface', 'inheritance', 'polymorphism', 'spring'] : [])
+    'architecture', 'framework', 'library', 'function', 'method'
   ];
   
-  // Count keywords in transcript
-  const normalizedTranscript = transcript.toLowerCase();
-  const keywordCount = keywords.filter(keyword => 
+  // Tech stack specific terms
+  const techStackKeywords = techStack ? [
+    ...(techStack.toLowerCase().includes('react') ? 
+      ['component', 'jsx', 'virtual dom', 'state', 'props', 'hooks'] : []),
+    ...(techStack.toLowerCase().includes('node') ? 
+      ['event loop', 'callback', 'async', 'express', 'middleware'] : []),
+    ...(techStack.toLowerCase().includes('python') ? 
+      ['list', 'tuple', 'dictionary', 'class', 'function', 'django', 'flask'] : []),
+    ...(techStack.toLowerCase().includes('java') ? 
+      ['class', 'interface', 'inheritance', 'polymorphism', 'spring'] : [])
+  ] : [];
+  
+  // Combine all keywords, prioritizing question-specific ones
+  const keywords = [...questionKeywords, ...techStackKeywords, ...generalKeywords];
+  
+  // Count keywords in transcript and code
+  const normalizedTranscript = transcript ? transcript.toLowerCase() : '';
+  const normalizedCode = code ? code.toLowerCase() : '';
+  
+  // Check if the answer is just a greeting or very short
+  const isJustGreeting = normalizedTranscript.match(/^\s*(hi|hello|hey|greetings|my name is)\b.*?$/i);
+  const wordCount = normalizedTranscript.split(/\s+/).filter(w => w.length > 0).length;
+  const isVeryShort = wordCount < 20;
+  
+  // If it's just a greeting or very short, give a low score
+  if (isJustGreeting || isVeryShort) {
+    return {
+      score: 2,
+      feedback: `This answer is ${isJustGreeting ? 'just a greeting' : 'too short'} and does not address the technical question. A complete answer should explain the technical concepts in detail.`,
+      criteria: {
+        technicalAccuracy: 1,
+        completeness: 1,
+        clarity: 2,
+        examples: 1
+      }
+    };
+  }
+  
+  // Count question-specific keywords (these are most important)
+  const questionKeywordCount = questionKeywords.filter(keyword => 
+    normalizedTranscript.includes(keyword.toLowerCase()) || 
+    normalizedCode.includes(keyword.toLowerCase())
+  ).length;
+  
+  // Count all keywords
+  const transcriptKeywordCount = keywords.filter(keyword => 
     normalizedTranscript.includes(keyword.toLowerCase())
   ).length;
   
-  // Calculate a simple score based on keyword matches and transcript length
-  const keywordScore = Math.min(10, (keywordCount / 5) * 10);
-  const lengthScore = Math.min(10, (transcript.length / 500) * 10);
-  const score = Math.round((keywordScore * 0.7 + lengthScore * 0.3) * 10) / 10;
+  const codeKeywordCount = keywords.filter(keyword => 
+    normalizedCode.includes(keyword.toLowerCase())
+  ).length;
+  
+  const totalKeywordCount = transcriptKeywordCount + codeKeywordCount;
+  
+  // Calculate relevance score - heavily weighted by question-specific keywords
+  const relevanceScore = questionKeywords.length > 0 ? 
+    Math.min(10, (questionKeywordCount / questionKeywords.length) * 10) : 5;
+  
+  // Calculate keyword score - based on total keywords
+  const keywordScore = Math.min(10, (totalKeywordCount / 8) * 10);
+  
+  // Calculate length scores
+  const transcriptLength = transcript ? transcript.length : 0;
+  const codeLength = code ? code.length : 0;
+  
+  const transcriptLengthScore = Math.min(10, (transcriptLength / 500) * 10);
+  const codeLengthScore = Math.min(10, (codeLength / 200) * 10);
+  
+  // Weight the length scores based on what was provided
+  let lengthScore;
+  if (transcript && code) {
+    lengthScore = (transcriptLengthScore * 0.6) + (codeLengthScore * 0.4);
+  } else if (transcript) {
+    lengthScore = transcriptLengthScore;
+  } else if (code) {
+    lengthScore = codeLengthScore;
+  } else {
+    lengthScore = 0;
+  }
+  
+  // Calculate final score with weights - relevance is most important
+  const score = Math.round((relevanceScore * 0.5 + keywordScore * 0.3 + lengthScore * 0.2) * 10) / 10;
+  
+  // Generate appropriate feedback
+  let feedback = 'This evaluation was generated using a fallback system. ';
+  
+  if (relevanceScore < 5) {
+    feedback += 'The answer does not seem to directly address the question asked. ';
+  }
+  
+  if (transcript && code) {
+    feedback += `Your verbal answer contains ${transcriptKeywordCount} relevant technical terms and is ${transcriptLength} characters long. `;
+    feedback += `Your code submission contains ${codeKeywordCount} relevant technical terms and is ${codeLength} characters long.`;
+  } else if (transcript) {
+    feedback += `Your verbal answer contains ${transcriptKeywordCount} relevant technical terms and is ${transcriptLength} characters long.`;
+  } else if (code) {
+    feedback += `Your code submission contains ${codeKeywordCount} relevant technical terms and is ${codeLength} characters long.`;
+  }
   
   return {
     score: Math.min(10, score),
-    feedback: `This evaluation was generated using a fallback system. Your answer contains ${keywordCount} relevant technical terms and is ${transcript.length} characters long.`,
+    feedback,
     criteria: {
-      technicalAccuracy: Math.round(keywordScore * 10) / 10,
-      completeness: Math.round(lengthScore * 10) / 10,
-      clarity: 5, // Default middle score
-      examples: normalizedTranscript.includes('example') ? 7 : 3
+      technicalAccuracy: Math.round(relevanceScore * 10) / 10,
+      completeness: Math.round(keywordScore * 10) / 10,
+      clarity: transcript ? Math.min(wordCount / 10, 10) : 3, // Clarity based on word count
+      examples: (normalizedTranscript.includes('example') || normalizedCode.length > 50) ? 7 : 3
     }
   };
 };

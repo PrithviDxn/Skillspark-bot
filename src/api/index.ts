@@ -226,9 +226,16 @@ export const aiAPI = {
     });
   },
   
-  evaluate: (data: { question: string, transcript: string, techStack?: string }) => 
-    api.post('/ai/evaluate', data)
+  evaluate: (data: { 
+    question: string, 
+    transcript: string, 
+    techStack?: string,
+    code?: string,
+    codeLanguage?: string 
+  }) => {
+    console.log('Sending evaluation request to AI API:', data);
+    return api.post('/ai/evaluate', data);
+  }
 };
 
-export default api; 
- 
+export default api;

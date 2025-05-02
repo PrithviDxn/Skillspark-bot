@@ -17,6 +17,13 @@ const AnswerSchema = new mongoose.Schema({
   transcript: {
     type: String
   },
+  code: {
+    type: String
+  },
+  codeLanguage: {
+    type: String,
+    default: 'javascript'
+  },
   score: {
     type: Number,
     min: 0,

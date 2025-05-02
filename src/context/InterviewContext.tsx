@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { techStackAPI, questionAPI, aiAPI, interviewAPI, answerAPI, uploadAPI } from '@/api';
-import freeEvaluationService from '@/services/FreeEvaluationService';
 
 // Types
 export type TechStack = {
@@ -538,7 +537,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const saveAnswer = async (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string): Promise<void> => {
+  const saveAnswer = async (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string, code?: string, codeLanguage?: string): Promise<void> => {
     setIsLoading(true);
     
     try {
@@ -606,33 +605,17 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         toast.warning('Your answer is too short or incomplete. Please provide a more detailed response.');
       }
       
-      // Continue with evaluation either way
-      if (useFreeMode) {
-        // Free mode - use rule-based evaluation
-        const evaluation = freeEvaluationService.evaluateAnswer(
-          question.text, 
-          finalTranscript, 
-          stack?.name
-        );
-        
-        score = evaluation.score;
-        feedback = evaluation.feedback;
-        criteria = evaluation.criteria;
-        
-        // Add note about mock transcript if applicable
-        if (usedMockTranscript) {
-          feedback = `[USING MOCK DATA] ${feedback}\n\nNote: This evaluation is based on auto-generated mock data, not your actual response.`;
-        }
-        
-        toast.success('Answer evaluated using local AI');
-      } else {
+      // Always use Cohere AI for evaluation regardless of free mode
+      try {
         // Paid mode - Use OpenAI services
         try {
           // Skip to evaluation - we already handled transcription above
           const evaluationResponse = await aiAPI.evaluate({
             question: question.text,
             transcript: finalTranscript,
-            techStack: stack?.name
+            techStack: stack?.name,
+            code: code,
+            codeLanguage: codeLanguage
           });
           
           if (evaluationResponse.data && evaluationResponse.data.data) {
@@ -640,6 +623,19 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             score = evaluation.score;
             feedback = evaluation.feedback;
             criteria = evaluation.criteria;
+            
+            // Check if evaluation method info is available
+            const evaluationMethod = evaluationResponse.data.evaluationMethod || 'unknown';
+            console.log(`✅ Answer evaluated using ${evaluationMethod.toUpperCase()} AI`);
+            
+            // Add evaluation method to feedback
+            if (evaluationMethod === 'cohere') {
+              feedback = `[EVALUATED BY COHERE AI] \n\n${feedback}`;
+              toast.success('Answer evaluated using Cohere AI');
+            } else if (evaluationMethod === 'fallback') {
+              feedback = `[EVALUATED BY FALLBACK SYSTEM] \n\n${feedback}`;
+              toast.info('Answer evaluated using fallback system');
+            }
           } else {
             throw new Error('Evaluation failed');
           }
@@ -651,6 +647,13 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           score = mockEval.score;
           feedback = `[MOCK EVALUATION] ${mockEval.feedback}\n\nNote: This is an auto-generated mock evaluation because the AI evaluation service failed.`;
         }
+      } catch (error) {
+        console.error('Evaluation error:', error);
+        toast.error('Evaluation failed, using backup method');
+        // Fallback to mock evaluation in case of failure
+        const mockEval = await mockEvaluateAnswer(question.text, finalTranscript);
+        score = mockEval.score;
+        feedback = `[MOCK EVALUATION] ${mockEval.feedback}\n\nNote: This is an auto-generated mock evaluation because the AI evaluation service failed.`;
       }
       
       // Create answer object
@@ -709,6 +712,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           question: questionId,
           transcript: finalTranscript,
           audioUrl: serverAudioUrl,
+          code: code,
+          codeLanguage: codeLanguage,
           score: score,
           feedback: feedback,
           criteria: formattedCriteria
