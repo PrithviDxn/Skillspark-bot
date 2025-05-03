@@ -6,7 +6,7 @@ import { answerAPI } from '@/api';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, Clock, User, Download, CheckCircle, XCircle, Info, RefreshCw, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, Calendar, ChevronLeft, Clock, User, CheckCircle, XCircle, AlertCircle, Info, Code, MessageSquare, BarChart, Download, RefreshCw } from 'lucide-react';
 import AudioPlayer from '@/components/AudioPlayer';
 import TranscriptViewer from '@/components/TranscriptViewer';
 import RadarChartDisplay from '@/components/RadarChartDisplay';
@@ -36,6 +36,7 @@ interface ApiAnswer {
   interview: string;
   audioUrl?: string;
   transcript?: string;
+  code?: string;
   score?: number;
   feedback?: string;
   criteria?: {
@@ -52,6 +53,7 @@ interface Answer {
   questionId: string | QuestionObject;
   audioUrl?: string;
   transcript?: string;
+  code?: string;
   score?: number;
   feedback?: string;
   criteria?: {
@@ -285,7 +287,7 @@ const InterviewReport = () => {
           );
           
           console.log(`Question ${question.id} (${question.text.substring(0, 30)}...) -> Answer ${
-            matchingAnswer ? `FOUND (id: ${matchingAnswer.id}, hasAudio: ${!!matchingAnswer.audioUrl}, hasTranscript: ${!!matchingAnswer.transcript})` : 'NOT FOUND'}`);
+            matchingAnswer ? `FOUND (id: ${matchingAnswer.id}, hasAudio: ${!!matchingAnswer.audioUrl}, hasTranscript: ${!!matchingAnswer.transcript}, hasCode: ${!!matchingAnswer.code})` : 'NOT FOUND'}`);
           
           return {
             question,
@@ -342,7 +344,8 @@ const InterviewReport = () => {
                       ...qa, 
                       answer: { 
                         ...qa.answer, 
-                        audioUrl: apiAnswer.audioUrl
+                        audioUrl: apiAnswer.audioUrl,
+                        code: apiAnswer.code
                       } 
                     } 
                   : qa
@@ -372,49 +375,79 @@ const InterviewReport = () => {
 
   // Function to handle transcript reload
   const handleTranscriptReload = async (answerId: string) => {
+    console.log(`Reloading transcript for answer ${answerId}`);
+    toast.info("Fetching transcript data directly...");
+      
+    // First try to get the answer directly from the API
     try {
-      toast.info("Fetching transcript data directly...");
-      console.log("Fetching transcript for answer ID:", answerId);
+      const answerResponse = await answerAPI.getById(answerId);
+      console.log("Answer API response:", answerResponse.data);
       
-      // First try to get the answer directly from the API
-      try {
-        const answerResponse = await answerAPI.getById(answerId);
-        console.log("Answer API response:", answerResponse.data);
+      if (answerResponse.data?.success && answerResponse.data?.data) {
+        const apiAnswer = answerResponse.data.data;
+        console.log("API answer data:", apiAnswer);
         
-        if (answerResponse.data?.success && answerResponse.data?.data) {
-          const apiAnswer = answerResponse.data.data;
-          console.log("API answer data:", apiAnswer);
-          
-          if (apiAnswer.transcript) {
-            console.log("Found transcript in API response:", apiAnswer.transcript);
-            
-            // Force update the transcript from the API response
-            setQuestionsWithAnswers(prev => 
-              prev.map(qa => 
-                qa.answer?.id === answerId 
-                  ? { 
-                      ...qa, 
-                      answer: { 
-                        ...qa.answer, 
-                        transcript: apiAnswer.transcript
-                      } 
-                    } 
-                  : qa
-              )
-            );
-            
-            toast.success("Transcript updated from database");
-            return;
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching answer by ID:", error);
+        // Update all answer data from the API response
+        console.log("Found answer data in API response:", {
+          hasTranscript: !!apiAnswer.transcript,
+          hasAudio: !!apiAnswer.audioUrl,
+          hasCode: !!apiAnswer.code,
+          hasScore: apiAnswer.score !== undefined,
+          hasFeedback: !!apiAnswer.feedback,
+          hasCriteria: !!apiAnswer.criteria
+        });
+        
+        // Force update all answer data from the API response
+        setQuestionsWithAnswers(prev => 
+          prev.map(qa => 
+            qa.answer?.id === answerId 
+              ? { 
+                  ...qa, 
+                  answer: { 
+                    ...qa.answer, 
+                    transcript: apiAnswer.transcript || '',
+                    audioUrl: apiAnswer.audioUrl || '',
+                    code: apiAnswer.code || '',
+                    score: apiAnswer.score,
+                    feedback: apiAnswer.feedback || '',
+                    criteria: apiAnswer.criteria || {
+                      technicalAccuracy: 0,
+                      completeness: 0,
+                      clarity: 0,
+                      examples: 0
+                    }
+                  } 
+                } 
+              : qa
+          )
+        );
+        
+        // Add a small delay to ensure the UI updates properly
+        setTimeout(() => {
+          // Log the updated state to verify changes
+          const updatedAnswer = questionsWithAnswers.find(qa => qa.answer?.id === answerId)?.answer;
+          console.log("Updated answer data after reload:", {
+            id: updatedAnswer?.id,
+            hasTranscript: !!updatedAnswer?.transcript,
+            transcriptLength: updatedAnswer?.transcript?.length || 0,
+            hasAudio: !!updatedAnswer?.audioUrl,
+            audioUrl: updatedAnswer?.audioUrl,
+            hasCode: !!updatedAnswer?.code,
+            hasScore: updatedAnswer?.score !== undefined,
+            hasFeedback: !!updatedAnswer?.feedback,
+            hasCriteria: !!updatedAnswer?.criteria
+          });
+        }, 500);
+        
+        toast.success("Answer data loaded successfully");
+        return;
+      } else {
+        console.error("API response doesn't contain answer data");
+        toast.error("Failed to load answer data");
       }
-      
-      toast.error("Could not find transcript in database");
     } catch (error) {
-      console.error("Error fetching transcript:", error);
-      toast.error("Failed to fetch transcript data");
+      console.error("Error fetching answer:", error);
+      toast.error("Error loading answer data");
     }
   };
 
@@ -502,7 +535,7 @@ const InterviewReport = () => {
               
               <Card className="mb-6">
                 <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="flex items-center">
                       <Calendar className="h-5 w-5 text-gray-500 mr-2" />
                       <div>
@@ -526,18 +559,42 @@ const InterviewReport = () => {
                         <p className="font-medium capitalize">{interview.status}</p>
                       </div>
                     </div>
-                    
-                    {averageScore !== null && (
-                      <div className="flex items-center">
-                        <div className={`h-5 w-5 mr-2 ${averageScore >= 7 ? 'text-green-500' : averageScore >= 4 ? 'text-yellow-500' : 'text-red-500'}`}>
-                          {averageScore >= 7 ? <CheckCircle /> : <XCircle />}
+                  </div>
+                  
+                  <div className="mt-4 border-t pt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {averageScore !== null && (
+                        <div className="flex items-center">
+                          <div className={`h-5 w-5 mr-2 ${averageScore >= 7 ? 'text-green-500' : averageScore >= 4 ? 'text-yellow-500' : 'text-red-500'}`}>
+                            {averageScore >= 7 ? <CheckCircle /> : averageScore >= 4 ? <AlertCircle /> : <XCircle />}
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Average Score</p>
+                            <p className="font-medium">{averageScore.toFixed(1)} / 10</p>
+                          </div>
                         </div>
+                      )}
+                      
+                      <div className="flex items-center">
+                        <MessageSquare className="h-5 w-5 text-gray-500 mr-2" />
                         <div>
-                          <p className="text-sm text-gray-500">Average Score</p>
-                          <p className="font-medium">{averageScore} / 10</p>
+                          <p className="text-sm text-gray-500">Questions Answered</p>
+                          <p className="font-medium">{questionsWithAnswers.filter(qa => qa.answer).length} / {questionsWithAnswers.length}</p>
                         </div>
                       </div>
-                    )}
+                      
+                      <div className="flex items-center">
+                        <BarChart className="h-5 w-5 text-gray-500 mr-2" />
+                        <div>
+                          <p className="text-sm text-gray-500">Completion Rate</p>
+                          <p className="font-medium">
+                            {questionsWithAnswers.length > 0 
+                              ? Math.round((questionsWithAnswers.filter(qa => qa.answer).length / questionsWithAnswers.length) * 100)
+                              : 0}%
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -626,6 +683,19 @@ const InterviewReport = () => {
                             onManualEntry={(answerId) => handleManualTranscript(answerId, qa.answer?.audioUrl)}
                           />
                         </div>
+                        
+                        {qa.answer.code && qa.answer.code.trim() !== '' && (
+                          <div className="mt-4">
+                            <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                              <Code size={16} className="mr-1" /> Code Submission
+                            </h4>
+                            <div className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto">
+                              <pre className="whitespace-pre-wrap break-words">
+                                <code>{qa.answer.code}</code>
+                              </pre>
+                            </div>
+                          </div>
+                        )}
                         
                         {qa.answer.feedback && (
                           <div>

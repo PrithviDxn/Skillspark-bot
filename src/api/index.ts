@@ -85,6 +85,8 @@ export const answerAPI = {
     question: string;
     audioUrl?: string;
     transcript?: string;
+    code?: string;
+    codeLanguage?: string;
     score?: number;
     feedback?: string;
     criteria?: {
@@ -98,6 +100,10 @@ export const answerAPI = {
     return api.post('/answers', answerData);
   },
   update: (id: string, answerData: {
+    audioUrl?: string;
+    transcript?: string;
+    code?: string;
+    codeLanguage?: string;
     score?: number;
     feedback?: string;
     criteria?: {

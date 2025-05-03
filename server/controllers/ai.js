@@ -78,7 +78,7 @@ export const evaluateAnswer = async (req, res, next) => {
     console.log('Question:', question.substring(0, 100) + '...');
     console.log('Transcript length:', transcript ? transcript.length : 'No transcript');
     console.log('Code provided:', !!code);
-    console.log('Code language:', codeLanguage || 'Not specified');
+    console.log('Code provided for evaluation');
     console.log('Tech Stack:', techStack || 'Not specified');
     console.log('Cohere API Key available:', !!process.env.COHERE_API_KEY);
     console.log('Cohere API Key:', process.env.COHERE_API_KEY ? process.env.COHERE_API_KEY.substring(0, 5) + '...' : 'Not set');
@@ -93,8 +93,8 @@ export const evaluateAnswer = async (req, res, next) => {
     
     ${transcript ? `Answer transcript: ${transcript}` : 'No verbal answer was provided.'}
     ${code ? `
-    Code submission (${codeLanguage || 'javascript'}):
-    \`\`\`${codeLanguage || 'javascript'}
+    Code submission:
+    \`\`\`
     ${code}
     \`\`\`
     ` : ''}

@@ -194,8 +194,8 @@ router.put('/:id', protect, async (req, res) => {
     } else {
       const candidateId = interview.candidate._id || interview.candidate;
       if (candidateId.toString() === req.user.id) {
-        // Only allow candidate to update audioUrl and transcript
-        const allowedUpdates = ['audioUrl', 'transcript'];
+        // Allow candidate to update audioUrl, transcript, and code
+        const allowedUpdates = ['audioUrl', 'transcript', 'code', 'codeLanguage'];
         
         Object.keys(req.body).forEach(key => {
           if (!allowedUpdates.includes(key)) {

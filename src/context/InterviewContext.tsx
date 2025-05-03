@@ -29,6 +29,7 @@ export type Answer = {
   questionId: string;
   audioUrl?: string;
   transcript?: string;
+  code?: string;
   score?: number;
   feedback?: string;
   criteria?: {
@@ -64,7 +65,7 @@ type InterviewContextType = {
   startInterview: (candidateId: string, roleId: string, techStackIds: string[]) => Promise<Interview>;
   endInterview: (interviewId: string) => Promise<void>;
   getQuestionsForStack: (stackId: string) => Question[];
-  saveAnswer: (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string) => Promise<void>;
+  saveAnswer: (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string, code?: string) => Promise<void>;
   getInterviewDetails: (interviewId: string) => Interview | null;
   refreshInterview: (interviewId: string) => Promise<Interview | null>;
   isLoading: boolean;
@@ -759,17 +760,38 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         
         console.log("Formatted criteria for initial save:", formattedCriteria);
         
+        // Log what we're about to save to the database
+        console.log('Saving answer to database with data:', {
+          interview: interviewId,
+          question: questionId,
+          hasTranscript: !!finalTranscript,
+          transcriptLength: finalTranscript ? finalTranscript.length : 0,
+          hasAudioUrl: !!serverAudioUrl,
+          hasCode: !!code,
+          codeLength: code ? code.length : 0,
+          hasScore: score !== undefined,
+          score: score,
+          hasFeedback: !!feedback,
+          feedbackLength: feedback ? feedback.length : 0,
+          hasCriteria: !!formattedCriteria
+        });
+        
         // Now save the answer with ALL data including evaluation in one step
         const answerResponse = await answerAPI.create({
           interview: interviewId,
           question: questionId,
-          transcript: finalTranscript,
-          audioUrl: serverAudioUrl,
-          code: code,
-          codeLanguage: codeLanguage,
-          score: score,
-          feedback: feedback,
-          criteria: formattedCriteria
+          transcript: finalTranscript || '',
+          audioUrl: serverAudioUrl || '',
+          code: code || '',
+          codeLanguage: codeLanguage || 'javascript',
+          score: score !== undefined ? score : null,
+          feedback: feedback || '',
+          criteria: formattedCriteria || {
+            technicalAccuracy: 0,
+            completeness: 0,
+            clarity: 0,
+            examples: 0
+          }
         });
         
         console.log("Complete answer created in database:", answerResponse.data);
@@ -1015,6 +1037,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             questionId: answer.question,
             audioUrl: answer.audioUrl,
             transcript: answer.transcript,
+            code: answer.code,
             score: answer.score,
             feedback: answer.feedback,
             criteria: answer.criteria
