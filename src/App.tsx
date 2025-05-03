@@ -18,6 +18,7 @@ import NotAuthorized from "./pages/NotAuthorized";
 import NotFound from "./pages/NotFound";
 import CreateAdmin from "./pages/CreateAdmin";
 import Settings from "./pages/Settings";
+import RoleManagement from "./pages/RoleManagement";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,14 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute requiredRole="admin">
           <CreateAdmin />
+        </ProtectedRoute>
+      } 
+    />
+    <Route 
+      path="/admin/tech-stack-roles" 
+      element={
+        <ProtectedRoute requiredRole="admin">
+          <RoleManagement />
         </ProtectedRoute>
       } 
     />

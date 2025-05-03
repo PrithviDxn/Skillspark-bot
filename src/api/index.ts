@@ -238,4 +238,19 @@ export const aiAPI = {
   }
 };
 
+// Role endpoints
+export const roleAPI = {
+  getAll: () => api.get('/roles'),
+  getById: (id: string) => api.get(`/roles/${id}`),
+  create: (roleData: { name: string; description: string }) =>
+    api.post('/roles', roleData),
+  update: (id: string, roleData: { name?: string; description?: string; techStacks?: string[] }) =>
+    api.put(`/roles/${id}`, roleData),
+  delete: (id: string) => api.delete(`/roles/${id}`),
+  addTechStacks: (id: string, techStackIds: string[]) =>
+    api.put(`/roles/${id}/techstacks`, { techStackIds }),
+  removeTechStack: (id: string, techStackId: string) =>
+    api.delete(`/roles/${id}/techstacks/${techStackId}`)
+};
+
 export default api;

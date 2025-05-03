@@ -297,6 +297,9 @@ const AdminDashboard: React.FC = () => {
           >
             Tech Stack Questions
           </button>
+          <Link to="/admin/tech-stack-roles" className="px-4 py-2 font-medium text-interview-primary hover:text-interview-primary/80">
+            Role Manager
+          </Link>
           <button
             className={`px-4 py-2 font-medium ${
               activeTab === 'users'

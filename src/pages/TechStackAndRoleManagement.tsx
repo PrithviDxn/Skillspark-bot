@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import Layout from '@/components/Layout';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Plus, X, Edit, Trash } from 'lucide-react';
+import { Plus, X, Trash } from 'lucide-react';
 import { toast } from 'sonner';
 import { techStackAPI, roleAPI } from '@/api';
-import { useInterview } from '@/context/InterviewContext';
-import axios, { AxiosError } from 'axios';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useInterview } from '@/context/InterviewContext';
 
+// Types
 type TechStack = {
   _id: string;
   id: string;
@@ -28,32 +29,26 @@ type Role = {
   techStacks: TechStack[];
 };
 
-interface TechStackManagerProps {
-  displayFullCard?: boolean;
-}
-
-const TechStackManager: React.FC<TechStackManagerProps> = ({ displayFullCard = false }) => {
-  // Tech Stack state
-  const [isSubmittingStack, setIsSubmittingStack] = useState(false);
-  const [newStackName, setNewStackName] = useState('');
-  const [newStackDescription, setNewStackDescription] = useState('');
-  const [techStacks, setTechStacks] = useState<TechStack[]>([]);
+const RoleManagement = () => {
+  const { user } = useAuth();
+  const { refreshTechStacks, availableTechStacks } = useInterview();
+  
+  // Check if user is admin
+  const isAdmin = user?.role === 'admin';
   
   // Role state
-  const [isSubmittingRole, setIsSubmittingRole] = useState(false);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleDescription, setNewRoleDescription] = useState('');
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [isSubmittingRole, setIsSubmittingRole] = useState(false);
   const [selectedTechStackId, setSelectedTechStackId] = useState('');
   
-  const { refreshTechStacks } = useInterview();
-  
-  // Fetch tech stacks and roles on component mount
+  // Fetch roles on component mount
   useEffect(() => {
-    fetchTechStacks();
-    fetchRoles();
-  }, []);
+    if (isAdmin) {
+      fetchRoles();
+    }
+  }, [isAdmin]);
   
   const fetchTechStacks = async () => {
     try {
@@ -129,22 +124,13 @@ const TechStackManager: React.FC<TechStackManagerProps> = ({ displayFullCard = f
         await fetchTechStacks();
         await refreshTechStacks();
       }
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error('Error adding tech stack:', error);
       
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        
-        if (axiosError.response?.status === 401) {
-          toast.error('Authentication error: Please log in again');
-        } else if (axiosError.response?.status === 403) {
-          toast.error('You do not have permission to add tech stacks');
-        } else if (axiosError.response?.data && typeof axiosError.response.data === 'object') {
-          const errorData = axiosError.response.data as { error?: string };
-          toast.error(`Failed to add tech stack: ${errorData.error || 'Unknown error'}`);
-        } else {
-          toast.error('Failed to add tech stack: Server error');
-        }
+      if (error.response?.status === 401) {
+        toast.error('Authentication error: Please log in again');
+      } else if (error.response?.status === 403) {
+        toast.error('You do not have permission to add tech stacks');
       } else {
         toast.error('Failed to add tech stack');
       }
@@ -422,51 +408,44 @@ const TechStackManager: React.FC<TechStackManagerProps> = ({ displayFullCard = f
     </div>
   );
 
-  // Main render
-  if (!displayFullCard) {
-    return renderAddTechStackForm();
+  if (!isAdmin) {
+    return (
+      <Layout>
+        <div className="container mx-auto py-8">
+          <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+          <p>You do not have permission to access this page.</p>
+        </div>
+      </Layout>
+    );
   }
-
+  
   return (
-    <Tabs defaultValue="tech-stacks" className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="tech-stacks">Tech Stacks</TabsTrigger>
-        <TabsTrigger value="roles">Roles</TabsTrigger>
-      </TabsList>
-      
-      <TabsContent value="tech-stacks" className="space-y-6 mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Add New Tech Stack</CardTitle>
-            <CardDescription>
-              Create a new technology stack that can be assigned to roles and interviews.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {renderAddTechStackForm()}
-          </CardContent>
-        </Card>
+    <Layout>
+      <div className="container mx-auto py-8">
+        <h1 className="text-3xl font-bold mb-8">Role Management</h1>
+        <p className="text-muted-foreground mb-8">
+          Create and manage roles for interviews. Each role can have multiple tech stacks associated with it.
+          When scheduling an interview, candidates will be assigned a role and will receive questions based on the tech stacks associated with that role.
+        </p>
         
-        {renderTechStackList()}
-      </TabsContent>
-      
-      <TabsContent value="roles" className="space-y-6 mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Add New Role</CardTitle>
-            <CardDescription>
-              Create a new role that can be assigned to candidates during interview scheduling.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {renderAddRoleForm()}
-          </CardContent>
-        </Card>
-        
-        {renderRoleList()}
-      </TabsContent>
-    </Tabs>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Add New Role</CardTitle>
+              <CardDescription>
+                Create a new role that can be assigned to candidates during interview scheduling.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {renderAddRoleForm()}
+            </CardContent>
+          </Card>
+          
+          {renderRoleList()}
+        </div>
+      </div>
+    </Layout>
   );
 };
 
-export default TechStackManager;
+export default RoleManagement;

@@ -9,15 +9,25 @@ const openai = new OpenAI({
 
 // Initialize Cohere client
 const cohereApiKey = process.env.COHERE_API_KEY || '';
-const cohere = new CohereClient({
-  token: cohereApiKey,
-});
 
 // Log Cohere API key status at startup
 console.log('\n==== COHERE AI CONFIGURATION ====');
 console.log('Cohere API Key configured:', !!cohereApiKey);
 console.log('Cohere API Key first 5 chars:', cohereApiKey ? cohereApiKey.substring(0, 5) + '...' : 'Not set');
 console.log('============================\n');
+
+// Create Cohere client only if API key is available
+let cohere = null;
+if (cohereApiKey) {
+  try {
+    cohere = new CohereClient({
+      token: cohereApiKey,
+    });
+    console.log('Cohere client initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize Cohere client:', error.message);
+  }
+}
 
 // @desc    Transcribe audio with OpenAI Whisper
 // @route   POST /api/v1/ai/transcribe
@@ -126,6 +136,25 @@ export const evaluateAnswer = async (req, res, next) => {
     }
     `;
 
+    // Make sure Cohere API key is configured
+    if (!cohereApiKey) {
+      console.error('Cohere API key is not configured. Please set COHERE_API_KEY in your environment variables.');
+      return next(new ErrorResponse('Cohere API key is not configured. Please set COHERE_API_KEY in your environment variables.', 500));
+    }
+    
+    // Initialize Cohere client if not already initialized
+    if (!cohere) {
+      try {
+        cohere = new CohereClient({
+          token: cohereApiKey,
+        });
+        console.log('Cohere client initialized on-demand');
+      } catch (error) {
+        console.error('Failed to initialize Cohere client:', error.message);
+        return next(new ErrorResponse(`Failed to initialize Cohere client: ${error.message}`, 500));
+      }
+    }
+    
     try {
       console.log('Making Cohere API request with these parameters:');
       console.log('- Model: command');
@@ -207,17 +236,9 @@ export const evaluateAnswer = async (req, res, next) => {
       console.error('Error type:', cohereError.name);
       console.error('Error message:', cohereError.message);
       console.error('Error stack:', cohereError.stack);
-      console.log('Falling back to local evaluation method');
       
-      // Fallback to FreeEvaluationService-like logic if Cohere fails
-      const fallbackEvaluation = createFallbackEvaluation(question, transcript, techStack, code);
-      
-      res.status(200).json({
-        success: true,
-        data: fallbackEvaluation,
-        evaluationMethod: 'fallback',
-        note: 'Used fallback evaluation due to Cohere API error'
-      });
+      // Return the error to the client instead of falling back
+      return next(new ErrorResponse(`Cohere AI evaluation failed: ${cohereError.message}. Please check your Cohere API key and try again.`, 500));
     }
   } catch (err) {
     console.error('Evaluation error:', err);

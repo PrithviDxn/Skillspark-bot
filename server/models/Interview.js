@@ -6,10 +6,18 @@ const InterviewSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'Please specify a candidate']
   },
+  role: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Role',
+    required: [true, 'Please specify a role']
+  },
+  techStacks: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TechStack'
+  }],
   techStack: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'TechStack',
-    required: [true, 'Please specify a tech stack']
+    ref: 'TechStack'
   },
   status: {
     type: String,

@@ -82,9 +82,31 @@ const Interview: React.FC = () => {
         }
       });
     }
-    if (currentInterview?.stackId && typeof getQuestionsForStack === 'function') {
-      const stackQuestions = getQuestionsForStack(currentInterview.stackId);
-      setQuestions(stackQuestions || []);
+    // Load questions from all tech stacks associated with this interview
+    if (typeof getQuestionsForStack === 'function') {
+      let allQuestions: Question[] = [];
+      
+      // First check for multiple tech stacks (new format)
+      if (currentInterview?.techStackIds && Array.isArray(currentInterview.techStackIds) && currentInterview.techStackIds.length > 0) {
+        // Load questions from each tech stack and combine them
+        currentInterview.techStackIds.forEach(stackId => {
+          const stackQuestions = getQuestionsForStack(stackId);
+          if (stackQuestions && stackQuestions.length > 0) {
+            allQuestions = [...allQuestions, ...stackQuestions];
+          }
+        });
+      } 
+      // Fallback to single tech stack (backward compatibility)
+      else if (currentInterview?.stackId) {
+        const stackQuestions = getQuestionsForStack(currentInterview.stackId);
+        if (stackQuestions) {
+          allQuestions = stackQuestions;
+        }
+      }
+      
+      // Shuffle the questions to mix them up from different tech stacks
+      const shuffledQuestions = allQuestions.sort(() => Math.random() - 0.5);
+      setQuestions(shuffledQuestions);
     }
     if (currentInterview?.scheduledDate) {
       try {

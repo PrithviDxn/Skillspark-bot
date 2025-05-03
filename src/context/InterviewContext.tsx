@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { techStackAPI, questionAPI, aiAPI, interviewAPI, answerAPI, uploadAPI } from '@/api';
+import { techStackAPI, questionAPI, aiAPI, interviewAPI, answerAPI, uploadAPI, roleAPI } from '@/api';
 
 // Types
 export type TechStack = {
@@ -8,6 +8,13 @@ export type TechStack = {
   name: string;
   description: string;
   icon: string;
+};
+
+export type Role = {
+  id: string;
+  name: string;
+  description: string;
+  techStacks: string[];
 };
 
 export type Question = {
@@ -35,7 +42,9 @@ export type Answer = {
 export type Interview = {
   id: string;
   candidateId: string;
-  stackId: string;
+  roleId?: string; // New field for role
+  stackId?: string; // Now optional since we can have multiple tech stacks
+  techStackIds?: string[]; // New field for multiple tech stacks
   status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
   createdAt: string;
   completedAt?: string;
@@ -47,11 +56,12 @@ export type Interview = {
 
 type InterviewContextType = {
   availableTechStacks: TechStack[];
+  availableRoles: Role[];
   questionsByStack: Record<string, Question[]>;
   currentInterview: Interview | null;
   setCurrentInterview: React.Dispatch<React.SetStateAction<Interview | null>>;
   interviews: Interview[];
-  startInterview: (candidateId: string, stackId: string) => Promise<Interview>;
+  startInterview: (candidateId: string, roleId: string, techStackIds: string[]) => Promise<Interview>;
   endInterview: (interviewId: string) => Promise<void>;
   getQuestionsForStack: (stackId: string) => Question[];
   saveAnswer: (interviewId: string, questionId: string, audioBlob: Blob, transcript?: string) => Promise<void>;
@@ -59,6 +69,7 @@ type InterviewContextType = {
   refreshInterview: (interviewId: string) => Promise<Interview | null>;
   isLoading: boolean;
   refreshTechStacks: () => Promise<void>;
+  refreshRoles: () => Promise<void>;
   refreshQuestions: (stackId: string) => Promise<void>;
   useFreeMode: boolean;
   setUseFreeMode: React.Dispatch<React.SetStateAction<boolean>>;
@@ -342,6 +353,8 @@ interface ApiInterview {
   _id: string;
   candidate: { _id: string } | string;
   techStack: { _id: string } | string;
+  techStacks?: Array<{ _id: string } | string>; // Add support for multiple tech stacks
+  role?: { _id: string } | string; // Add support for role
   status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
   createdAt: string;
   completedAt?: string;
@@ -364,7 +377,7 @@ interface ApiAnswer {
     completeness: number;
     clarity: number;
     examples: number;
-  };
+  }
 }
 
 export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -373,8 +386,11 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [availableTechStacks, setAvailableTechStacks] = useState<TechStack[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [questionsByStack, setQuestionsByStack] = useState<Record<string, Question[]>>({});
-
+  const [useFreeMode, setUseFreeMode] = useState<boolean>(true); // Default to free mode
+  
+  // Debug: Print all questions for all stacks whenever questionsByStack changes
   useEffect(() => {
     console.log('[DEBUG][InterviewContext] questionsByStack changed:', questionsByStack);
     if (!questionsByStack || Object.keys(questionsByStack).length === 0) {
@@ -387,11 +403,11 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
     }
   }, [questionsByStack, availableTechStacks]);
-  const [useFreeMode, setUseFreeMode] = useState<boolean>(true); // Default to free mode
 
-  // Fetch tech stacks and interviews on mount
+  // Fetch tech stacks, roles, and interviews on mount
   useEffect(() => {
     fetchTechStacks();
+    fetchRoles();
     fetchInterviews();
   }, []);
 
@@ -429,6 +445,43 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setQuestionsByStack(mockQuestions);
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // Function to fetch roles from API
+  const fetchRoles = async () => {
+    setIsLoading(true);
+    try {
+      const response = await roleAPI.getAll();
+      if (response.data && response.data.data) {
+        const roles = response.data.data.map((role: any) => ({
+          id: role._id,
+          name: role.name,
+          description: role.description,
+          techStacks: Array.isArray(role.techStacks) ? role.techStacks.map((stack: any) => 
+            typeof stack === 'object' ? stack._id : stack
+          ) : []
+        }));
+        setAvailableRoles(roles);
+        console.log('[DEBUG][InterviewContext] Fetched roles:', roles);
+      }
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+      toast.error('Failed to load roles');
+      setAvailableRoles([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Function to refresh roles
+  const refreshRoles = async (): Promise<void> => {
+    try {
+      await fetchRoles();
+      toast.success('Roles refreshed');
+    } catch (error) {
+      console.error('Error refreshing roles:', error);
+      toast.error('Failed to refresh roles');
     }
   };
 
@@ -906,10 +959,39 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Convert to our internal format
       // Debug: Map API interview to internal Interview type
       console.log('[refreshInterview] Mapping apiInterview to Interview type');
+      
+      // Process tech stacks - handle both single and multiple tech stacks
+      let techStackIds: string[] = [];
+      
+      // First check if we have techStacks array (new format)
+      if (apiInterview.techStacks && Array.isArray(apiInterview.techStacks)) {
+        techStackIds = apiInterview.techStacks.map(stack => 
+          typeof stack === 'object' ? stack._id : stack as string
+        );
+        console.log('[refreshInterview] Found techStacks array:', techStackIds);
+      }
+      
+      // Always include the single techStack for backward compatibility
+      const singleStackId = typeof apiInterview.techStack === 'object' ? 
+        apiInterview.techStack._id : apiInterview.techStack as string;
+      
+      // If we don't have techStackIds yet, use the single stack
+      if (techStackIds.length === 0 && singleStackId) {
+        techStackIds = [singleStackId];
+        console.log('[refreshInterview] Using single techStack:', singleStackId);
+      }
+      
+      // Get role ID if present
+      const roleId = apiInterview.role ? 
+        (typeof apiInterview.role === 'object' ? apiInterview.role._id : apiInterview.role as string) : 
+        undefined;
+      
       const formattedInterview: Interview = {
         id: apiInterview._id, // Use only _id from API
         candidateId: typeof apiInterview.candidate === 'object' ? apiInterview.candidate._id : apiInterview.candidate as string,
-        stackId: typeof apiInterview.techStack === 'object' ? apiInterview.techStack._id : apiInterview.techStack as string,
+        stackId: singleStackId, // Keep for backward compatibility
+        techStackIds: techStackIds, // Add the array of tech stack IDs
+        roleId: roleId, // Add role ID if present
         status: apiInterview.status as 'scheduled' | 'in-progress' | 'completed' | 'cancelled',
         createdAt: apiInterview.createdAt,
         completedAt: apiInterview.completedAt,
@@ -918,6 +1000,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         duration: apiInterview.duration,
         answers: []
       };
+      
+      console.log('[refreshInterview] Formatted interview with techStackIds:', formattedInterview);
       
       console.log('[refreshInterview] Fetching answers for interview:', interviewId);
       // Fetch all answers for this interview
@@ -972,6 +1056,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <InterviewContext.Provider
       value={{
         availableTechStacks,
+        availableRoles,
         questionsByStack,
         currentInterview,
         setCurrentInterview,
@@ -984,6 +1069,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         refreshInterview,
         isLoading,
         refreshTechStacks,
+        refreshRoles,
         refreshQuestions,
         useFreeMode,
         setUseFreeMode
