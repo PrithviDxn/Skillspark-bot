@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { useInterview, Question, Interview as InterviewType } from '@/context/InterviewContext';
+import { useInterview, Question as BaseQuestion, Interview as InterviewType } from '@/context/InterviewContext';
 import { answerAPI } from '@/api';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -54,6 +54,7 @@ interface Answer {
   audioUrl?: string;
   transcript?: string;
   code?: string;
+  codeEvaluation?: string;
   score?: number;
   feedback?: string;
   criteria?: {
@@ -62,6 +63,11 @@ interface Answer {
     clarity: number;
     examples: number;
   };
+}
+
+// Extend the Question interface to include tech stack information
+interface Question extends BaseQuestion {
+  techStack?: string;
 }
 
 type QuestionWithAnswer = {
@@ -109,7 +115,14 @@ const InterviewReport = () => {
   const { interviews, getQuestionsForStack, availableTechStacks, refreshQuestions, refreshInterview } = useInterview();
   const navigate = useNavigate();
   
-  const [interview, setInterview] = useState<InterviewType | null>(null);
+  // Extended interview type to include candidate information
+  interface ExtendedInterview extends InterviewType {
+    candidateName?: string;
+    candidateEmail?: string;
+  }
+  
+  const [interview, setInterview] = useState<ExtendedInterview | null>(null);
+  const [qaMap, setQaMap] = useState<QuestionWithAnswer[]>([]);
   const [questionsWithAnswers, setQuestionsWithAnswers] = useState<QuestionWithAnswer[]>([]);
   const [averageScore, setAverageScore] = useState<number | null>(null);
   const [criteriaAverages, setCriteriaAverages] = useState<RadarChartData[] | null>(null);
@@ -135,6 +148,25 @@ const InterviewReport = () => {
       return question.id === answer.questionId;
     }
     
+    // Additional fallback matching logic for tech stack questions
+    // This helps match questions and answers across different tech stacks
+    if (question.text && answer.transcript) {
+      // If the question text appears in the transcript, it's likely a match
+      // This is a fallback method when IDs don't match directly
+      const questionWords = question.text.toLowerCase().split(' ');
+      const significantWords = questionWords.filter(word => word.length > 4).slice(0, 5);
+      
+      if (significantWords.length > 0) {
+        const transcript = answer.transcript.toLowerCase();
+        // If at least 3 significant words from the question appear in the transcript
+        const matchCount = significantWords.filter(word => transcript.includes(word)).length;
+        if (matchCount >= Math.min(3, significantWords.length)) {
+          console.log(`Matched question and answer based on content similarity`);
+          return true;
+        }
+      }
+    }
+    
     return false;
   };
 
@@ -149,6 +181,8 @@ const InterviewReport = () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Starting interview data fetch for report ID:', reportId);
+      const startTime = performance.now();
       
       // Find the interview in the context
       let foundInterview = interviews.find(i => i.id === reportId);
@@ -166,10 +200,18 @@ const InterviewReport = () => {
         foundInterview = refreshedInterview;
       }
       
-      setInterview(foundInterview);
+      // Try to get candidate information if available
+      const extendedInterview: ExtendedInterview = {
+        ...foundInterview,
+        // Extract candidate name/email from candidateId if available
+        candidateName: foundInterview.candidateId?.split('@')[0] || '',
+        candidateEmail: foundInterview.candidateId || ''
+      };
+      
+      setInterview(extendedInterview);
       
       // Calculate average score
-      const scores = foundInterview?.answers
+      const scores = extendedInterview?.answers
         .filter(a => typeof a.score === 'number')
         .map(a => a.score as number);
       
@@ -179,7 +221,7 @@ const InterviewReport = () => {
       }
       
       // Calculate criteria averages
-      if (foundInterview?.answers && foundInterview.answers.length > 0) {
+      if (extendedInterview?.answers && extendedInterview.answers.length > 0) {
         const criteriaSum = {
           technicalAccuracy: 0,
           completeness: 0,
@@ -230,24 +272,35 @@ const InterviewReport = () => {
       let allQuestions: Question[] = [];
       
       // First check for multiple tech stacks (new format)
-      if (foundInterview?.techStackIds && Array.isArray(foundInterview.techStackIds) && foundInterview.techStackIds.length > 0) {
-        console.log(`Interview has ${foundInterview.techStackIds.length} tech stacks:`, foundInterview.techStackIds);
+      if (extendedInterview?.techStackIds && Array.isArray(extendedInterview.techStackIds) && extendedInterview.techStackIds.length > 0) {
+        console.log(`Interview has ${extendedInterview.techStackIds.length} tech stacks:`, extendedInterview.techStackIds);
         
         // Load questions from each tech stack and combine them
-        foundInterview.techStackIds.forEach(stackId => {
+        extendedInterview.techStackIds.forEach(stackId => {
           const stackQuestions = getQuestionsForStack(stackId);
           if (stackQuestions && stackQuestions.length > 0) {
             console.log(`Found ${stackQuestions.length} questions for stack ${stackId}`);
-            allQuestions = [...allQuestions, ...stackQuestions];
+            // Add tech stack information to each question
+            const stackName = availableTechStacks.find(s => s.id === stackId)?.name || stackId;
+            const questionsWithStack = stackQuestions.map(q => ({
+              ...q,
+              techStack: stackName
+            }));
+            allQuestions = [...allQuestions, ...questionsWithStack];
           }
         });
       } 
       // Fallback to single tech stack (backward compatibility)
-      else if (foundInterview?.stackId) {
-        const stackQuestions = getQuestionsForStack(foundInterview.stackId);
+      else if (extendedInterview?.stackId) {
+        const stackQuestions = getQuestionsForStack(extendedInterview.stackId);
         if (stackQuestions && stackQuestions.length > 0) {
-          console.log(`Found ${stackQuestions.length} questions for stack ${foundInterview.stackId}`);
-          allQuestions = stackQuestions;
+          console.log(`Found ${stackQuestions.length} questions for stack ${extendedInterview.stackId}`);
+          const stackName = availableTechStacks.find(s => s.id === extendedInterview.stackId)?.name || extendedInterview.stackId;
+          const questionsWithStack = stackQuestions.map(q => ({
+            ...q,
+            techStack: stackName
+          }));
+          allQuestions = questionsWithStack;
         }
       }
       
@@ -255,7 +308,7 @@ const InterviewReport = () => {
       
       if (allQuestions && allQuestions.length > 0) {
         console.log(`Found ${allQuestions.length} total questions across all tech stacks`);
-        console.log(`Found ${foundInterview.answers.length} answers for interview ${foundInterview.id}`);
+        console.log(`Found ${extendedInterview.answers.length} answers for interview ${extendedInterview.id}`);
       
         // First, create a map of question IDs to their corresponding answers
         const questionIdToAnswerMap = new Map();
@@ -266,6 +319,10 @@ const InterviewReport = () => {
             const questionObj = answer.questionId as QuestionObject;
             questionIdToAnswerMap.set(questionObj._id, answer);
             console.log(`Mapped answer ${answer.id} to question ID ${questionObj._id} from embedded object`);
+          } else if (typeof answer.questionId === 'string') {
+            // Also map string questionIds
+            questionIdToAnswerMap.set(answer.questionId, answer);
+            console.log(`Mapped answer ${answer.id} to question ID ${answer.questionId} from string ID`);
           }
         });
         
@@ -282,7 +339,7 @@ const InterviewReport = () => {
           }
           
           // Otherwise, try to find a matching answer
-          const matchingAnswer = foundInterview.answers.find(answer => 
+          const matchingAnswer = extendedInterview.answers.find(answer => 
             isMatchingQuestionAndAnswer(question, answer)
           );
           
@@ -297,8 +354,11 @@ const InterviewReport = () => {
         
         console.log(`Final QA map has ${qaMap.length} items`);
         setQuestionsWithAnswers(qaMap);
+        setQaMap(qaMap);
       }
       
+      const endTime = performance.now();
+      console.log(`Interview data fetch completed in ${(endTime - startTime).toFixed(2)}ms`);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching interview data:', error);
@@ -345,7 +405,8 @@ const InterviewReport = () => {
                       answer: { 
                         ...qa.answer, 
                         audioUrl: apiAnswer.audioUrl,
-                        code: apiAnswer.code
+                        code: apiAnswer.code,
+                        codeEvaluation: apiAnswer.codeEvaluation
                       } 
                     } 
                   : qa
@@ -408,6 +469,7 @@ const InterviewReport = () => {
                     transcript: apiAnswer.transcript || '',
                     audioUrl: apiAnswer.audioUrl || '',
                     code: apiAnswer.code || '',
+                    codeEvaluation: apiAnswer.codeEvaluation || '',
                     score: apiAnswer.score,
                     feedback: apiAnswer.feedback || '',
                     criteria: apiAnswer.criteria || {
@@ -537,6 +599,14 @@ const InterviewReport = () => {
                 <CardContent className="pt-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="flex items-center">
+                      <User className="h-5 w-5 text-gray-500 mr-2" />
+                      <div>
+                        <p className="text-sm text-gray-500">Candidate</p>
+                        <p className="font-medium">{interview.candidateName || interview.candidateEmail || interview.candidateId || 'Not specified'}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center">
                       <Calendar className="h-5 w-5 text-gray-500 mr-2" />
                       <div>
                         <p className="text-sm text-gray-500">Date</p>
@@ -631,6 +701,56 @@ const InterviewReport = () => {
             
             <h2 className="text-2xl font-bold mb-4">Questions & Answers</h2>
             
+            {/* Display tech stacks for this interview */}
+            {interview.techStackIds && interview.techStackIds.length > 0 && (
+              <div className="mb-4">
+                <p className="text-sm text-gray-500 mb-2">Tech Stacks:</p>
+                <div className="flex flex-wrap gap-2">
+                  {interview.techStackIds.map(stackId => {
+                    const stackName = availableTechStacks.find(s => s.id === stackId)?.name || stackId;
+                    return (
+                      <span key={stackId} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                        {stackName}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            {/* Display filter by tech stack */}
+            {interview.techStackIds && interview.techStackIds.length > 1 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-sm text-gray-500">Filter by Tech Stack:</p>
+                  <select 
+                    className="text-sm border rounded px-2 py-1"
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === 'all') {
+                        // Show all questions from stored map
+                        setQuestionsWithAnswers(qaMap);
+                      } else {
+                        // Filter questions by tech stack
+                        const filtered = qaMap.filter(qa => 
+                          qa.question.techStack === value
+                        );
+                        setQuestionsWithAnswers(filtered);
+                      }
+                    }}
+                  >
+                    <option value="all">All Tech Stacks</option>
+                    {interview.techStackIds.map(stackId => {
+                      const stackName = availableTechStacks.find(s => s.id === stackId)?.name || stackId;
+                      return (
+                        <option key={stackId} value={stackName}>{stackName}</option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+            )}
+            
             {questionsWithAnswers && questionsWithAnswers.length > 0 ? (
               questionsWithAnswers.map((qa, index) => (
                 <Card key={qa.question.id} className="mb-6">
@@ -642,7 +762,14 @@ const InterviewReport = () => {
                       <span>{qa.question.text}</span>
                     </CardTitle>
                     <CardDescription>
-                      Difficulty: <span className="capitalize">{qa.question.difficulty || 'medium'}</span>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <span>Difficulty: <span className="capitalize">{qa.question.difficulty || 'medium'}</span></span>
+                        {qa.question.techStack && (
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
+                            {qa.question.techStack}
+                          </span>
+                        )}
+                      </div>
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -694,6 +821,14 @@ const InterviewReport = () => {
                                 <code>{qa.answer.code}</code>
                               </pre>
                             </div>
+                            
+                            {/* Code evaluation section */}
+                            {qa.answer.codeEvaluation && (
+                              <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                                <h5 className="text-xs font-medium text-gray-700 mb-1">Code Evaluation</h5>
+                                <div className="text-sm whitespace-pre-line">{qa.answer.codeEvaluation}</div>
+                              </div>
+                            )}
                           </div>
                         )}
                         
