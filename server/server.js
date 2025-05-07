@@ -61,6 +61,7 @@ import answerRoutes from './routes/answers.js';
 import uploadRoutes from './routes/uploads.js';
 import aiRoutes from './routes/ai.js';
 import roleRoutes from './routes/roles.js';
+import emailRoutes from './routes/email.js';
 
 const app = express();
 
@@ -98,6 +99,7 @@ app.use('/api/v1/answers', answerRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
 app.use('/api/v1/ai', aiRoutes);
 app.use('/api/v1/roles', roleRoutes);
+app.use('/api/v1/email', emailRoutes);
 
 // Basic route
 app.get('/', (req, res) => {

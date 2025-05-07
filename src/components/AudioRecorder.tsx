@@ -40,24 +40,7 @@ declare global {
   }
 }
 
-// Function to detect if text is likely a mock transcript
-const isMockTranscript = (text: string): boolean => {
-  if (!text) return false;
-  
-  // Common mock transcript starting phrases
-  const mockPhrases = [
-    "C is a procedural programming",
-    "JavaScript is a high-level",
-    "Python is a high-level",
-    "Java is a high-level",
-    "React is a JavaScript",
-    "Node.js is an open-source",
-    "TypeScript is a strongly typed",
-  ];
-  
-  // Check if transcript starts with any of the mock phrases
-  return mockPhrases.some(phrase => text.trim().startsWith(phrase));
-};
+// Mock transcript detection has been removed
 
 interface AudioRecorderProps {
   onRecordingComplete: (blob: Blob, transcript?: string) => void;
@@ -295,12 +278,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                 <div className="mb-2">
                   <p className="text-sm text-gray-600 font-semibold">Transcript:</p>
                   <p className="text-sm text-gray-800">{transcript}</p>
-                  {isMockTranscript(transcript) && (
-                    <div className="mt-1 flex items-center text-interview-danger text-xs p-1 bg-red-50 rounded">
-                      <AlertCircle size={12} className="mr-1" />
-                      <span>Warning: This appears to be a mock transcript. Real speech may not be properly transcribed.</span>
-                    </div>
-                  )}
                 </div>
               )}
               {interimTranscript && (
@@ -336,12 +313,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                 <div className="mt-2 p-3 bg-gray-100 rounded-md w-full">
                   <h4 className="text-sm font-medium mb-1">Transcript:</h4>
                   <p className="text-sm">{transcript}</p>
-                  {isMockTranscript(transcript) && (
-                    <div className="mt-1 flex items-center text-interview-danger text-xs p-1 bg-red-50 rounded">
-                      <AlertCircle size={12} className="mr-1" />
-                      <span>Warning: This appears to be a mock transcript. Real speech may not be properly transcribed.</span>
-                    </div>
-                  )}
                 </div>
               )}
               <Button 

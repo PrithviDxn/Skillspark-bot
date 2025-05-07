@@ -240,58 +240,7 @@ const Interview: React.FC = () => {
       const audioBlob = existingAnswer?.audioBlob;
       const transcript = existingAnswer?.transcript || '';
       
-      // Upload the audio file if available
-      let audioUrl = existingAnswer?.audioUrl || '';
-      if (audioBlob) {
-        try {
-          const uploadResponse = await uploadAPI.uploadAudio(audioBlob);
-          audioUrl = uploadResponse.data.data.fileUrl;
-          console.log('Audio uploaded successfully:', audioUrl);
-        } catch (uploadError) {
-          console.error('Error uploading audio:', uploadError);
-          toast.error('Failed to upload audio');
-        }
-      }
-      
-      // Always send to AI for evaluation if we have either transcript or code
-      let aiEvaluation = null;
-      if (transcript || (showCodeEditor && codeToSave)) {
-        try {
-          // Get the tech stack name
-          const techStackName = availableTechStacks.find(s => s.id === currentInterview.stackId)?.name || 'Unknown';
-          
-          console.log('Sending to AI for evaluation:', {
-            question: currentQuestion.text,
-            transcript: transcript || 'No verbal response provided.',
-            techStack: techStackName,
-            code: showCodeEditor ? codeToSave : undefined
-          });
-          
-          // Make sure we're sending non-empty values
-          const evaluationResponse = await aiAPI.evaluate({
-            question: currentQuestion.text,
-            transcript: transcript || 'No verbal response provided.',
-            techStack: techStackName,
-            code: showCodeEditor && codeToSave ? codeToSave : undefined
-          });
-          
-          if (evaluationResponse.data && evaluationResponse.data.data) {
-            aiEvaluation = evaluationResponse.data.data;
-            console.log('AI evaluation received:', aiEvaluation);
-          } else {
-            console.error('AI evaluation response missing data:', evaluationResponse);
-            toast.error('Invalid AI evaluation response format');
-          }
-        } catch (aiError) {
-          console.error('Error getting AI evaluation:', aiError);
-          toast.error('Failed to get AI evaluation');
-        }
-      } else {
-        console.warn('No transcript or code available for evaluation');
-        toast.warning('No content available for AI evaluation');
-      }
-      
-      // Create a local answer object to display immediately
+      // Create a local answer object to display immediately (do this early to improve perceived performance)
       const localAnswer = {
         id: Date.now().toString(),
         questionId: currentQuestion.id,
@@ -300,28 +249,105 @@ const Interview: React.FC = () => {
         audioUrl: audioBlob ? URL.createObjectURL(audioBlob) : '',
         transcript: transcript,
         code: showCodeEditor ? codeToSave : '',
-        score: aiEvaluation?.score || null,
-        feedback: aiEvaluation?.feedback || null,
-        criteria: aiEvaluation?.criteria || null
+        score: null, // Will be updated later
+        feedback: null, // Will be updated later
+        criteria: null // Will be updated later
       };
       
-      // Add to local answers array
+      // Add to local answers array immediately
       setLocalAnswers(prev => {
         // Replace if already exists for this question
         const filtered = prev.filter(a => a.questionId !== currentQuestion.id);
         return [...filtered, localAnswer];
       });
       
-      // Mark this question as answered
+      // Mark this question as answered immediately
       setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
       
-      // Save progress to sessionStorage
+      // Save progress to sessionStorage immediately
       const progress = {
         questionIndex: currentQuestionIndex,
         answeredQuestions: Array.from(answeredQuestions).concat(currentQuestion.id)
       };
       sessionStorage.setItem(`interview-progress-${interviewId}`, JSON.stringify(progress));
       localStorage.setItem(`interview-progress-${interviewId}`, JSON.stringify(progress));
+      
+      // Upload the audio file if available - do this in parallel
+      let audioUploadPromise = Promise.resolve('');
+      let audioUrl = existingAnswer?.audioUrl || '';
+      if (audioBlob) {
+        audioUploadPromise = uploadAPI.uploadAudio(audioBlob)
+          .then(response => {
+            audioUrl = response.data.data.fileUrl;
+            console.log('Audio uploaded successfully:', audioUrl);
+            return audioUrl;
+          })
+          .catch(uploadError => {
+            console.error('Error uploading audio:', uploadError);
+            toast.error('Failed to upload audio');
+            return '';
+          });
+      }
+      
+      // AI evaluation - do this in parallel
+      let aiEvaluationPromise = Promise.resolve(null);
+      if (transcript || (showCodeEditor && codeToSave)) {
+        // Get the tech stack name
+        const techStackName = availableTechStacks.find(s => s.id === currentInterview.stackId)?.name || 'Unknown';
+        
+        console.log('Sending to AI for evaluation:', {
+          question: currentQuestion.text,
+          transcript: transcript || 'No verbal response provided.',
+          techStack: techStackName,
+          code: showCodeEditor ? codeToSave : undefined
+        });
+        
+        // Make sure we're sending non-empty values
+        aiEvaluationPromise = aiAPI.evaluate({
+          question: currentQuestion.text,
+          transcript: transcript || 'No verbal response provided.',
+          techStack: techStackName,
+          code: showCodeEditor && codeToSave ? codeToSave : undefined
+        })
+        .then(evaluationResponse => {
+          if (evaluationResponse.data && evaluationResponse.data.data) {
+            console.log('AI evaluation received:', evaluationResponse.data.data);
+            return evaluationResponse.data.data;
+          } else {
+            console.error('AI evaluation response missing data:', evaluationResponse);
+            toast.error('Invalid AI evaluation response format');
+            return null;
+          }
+        })
+        .catch(aiError => {
+          console.error('Error getting AI evaluation:', aiError);
+          toast.error('Failed to get AI evaluation');
+          return null;
+        });
+      }
+      
+      // Wait for both promises to complete
+      const [audioUrlResult, aiEvaluation] = await Promise.all([
+        audioUploadPromise,
+        aiEvaluationPromise
+      ]);
+      
+      // Update local answer with AI evaluation results
+      if (aiEvaluation) {
+        setLocalAnswers(prev => {
+          return prev.map(a => {
+            if (a.questionId === currentQuestion.id) {
+              return {
+                ...a,
+                score: aiEvaluation.score || null,
+                feedback: aiEvaluation.feedback || null,
+                criteria: aiEvaluation.criteria || null
+              };
+            }
+            return a;
+          });
+        });
+      }
       
       // Save the answer to the database
       try {
@@ -348,7 +374,9 @@ const Interview: React.FC = () => {
         console.error('Error saving answer to database:', saveError);
       }
       
-      toast.success('Response saved successfully!');
+      toast.success('Response saved successfully! Click "Next Question" when you are ready to continue.');
+      // Do NOT automatically navigate to the next question - let the user decide when to move on
+      // This fixes the issue where the UI would be confusing after saving a response
     } catch (error) {
       console.error('Error saving response:', error);
       toast.error('Failed to save response');
@@ -754,27 +782,6 @@ const Interview: React.FC = () => {
 
   // Calculate progress percentage
   const progressPercentage = (answeredQuestions.size / questions.length) * 100;
-
-  // Add a function to detect mock transcripts
-  const isMockTranscript = (text?: string): boolean => {
-    if (!text) return false;
-    
-    // Check for our explicit mock markers
-    if (text.includes('[MOCK TRANSCRIPT]')) return true;
-    
-    // Also check for common phrases from mock transcripts
-    const mockPhrases = [
-      "C is a procedural programming",
-      "React's virtual DOM is",
-      "Node.js uses an event-driven",
-      "Generators in Python are",
-      "In Java, an interface defines",
-      "Closures in JavaScript occur",
-      "Memory management in C is"
-    ];
-    
-    return mockPhrases.some(phrase => text.includes(phrase));
-  };
 
   return (
     <Layout>

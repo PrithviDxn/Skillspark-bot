@@ -1,0 +1,4 @@
+# Add these lines to your .env file:
+RESEND_API_KEY=re_123456789
+RESEND_DOMAIN=skillspark.ai
+FRONTEND_URL=http://localhost:8082

@@ -259,4 +259,12 @@ export const roleAPI = {
     api.delete(`/roles/${id}/techstacks/${techStackId}`)
 };
 
+// Email endpoints
+export const emailAPI = {
+  sendInvitation: (interviewId: string) => 
+    api.post(`/email/send-invitation/${interviewId}`),
+  verifyToken: (interviewId: string, token: string) => 
+    api.get(`/email/verify-token/${interviewId}?token=${token}`)
+};
+
 export default api;

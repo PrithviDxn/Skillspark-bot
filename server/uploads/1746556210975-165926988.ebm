@@ -1,0 +1,4 @@
+{
+  type: 'h1',
+  props: { children: 'Hello, world!' }
+}

@@ -14,6 +14,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import CandidateSelect from "./pages/CandidateSelect";
 import Interview from "./pages/Interview";
 import InterviewReport from "./pages/InterviewReport";
+import InterviewDetails from "./pages/InterviewDetails";
 import NotAuthorized from "./pages/NotAuthorized";
 import NotFound from "./pages/NotFound";
 import CreateAdmin from "./pages/CreateAdmin";
@@ -110,6 +111,14 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute>
           <Interview />
+        </ProtectedRoute>
+      } 
+    />
+    <Route 
+      path="/interview-details/:interviewId" 
+      element={
+        <ProtectedRoute>
+          <InterviewDetails />
         </ProtectedRoute>
       } 
     />

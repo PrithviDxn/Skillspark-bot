@@ -30,6 +30,8 @@ export type Answer = {
   audioUrl?: string;
   transcript?: string;
   code?: string;
+  codeLanguage?: string;
+  codeEvaluation?: string;
   score?: number;
   feedback?: string;
   criteria?: {
@@ -76,220 +78,12 @@ type InterviewContextType = {
   setUseFreeMode: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-// Mock data - will use as fallback if API calls fail
-const mockTechStacks: TechStack[] = [
-  {
-    id: '1',
-    name: 'React',
-    description: 'Frontend JavaScript library for building user interfaces',
-    icon: '⚛️'
-  },
-  {
-    id: '2',
-    name: 'Python',
-    description: 'General-purpose programming language',
-    icon: '🐍'
-  },
-  {
-    id: '3',
-    name: 'Node.js',
-    description: 'JavaScript runtime for server-side applications',
-    icon: '🟢'
-  },
-  {
-    id: '4',
-    name: 'Java',
-    description: 'Object-oriented programming language',
-    icon: '☕'
-  }
-];
-
-const mockQuestions: Record<string, Question[]> = {
-  '1': [
-    {
-      id: '101',
-      stackId: '1',
-      text: 'Explain the concept of virtual DOM in React and how it improves performance.',
-      difficulty: 'medium'
-    },
-    {
-      id: '102',
-      stackId: '1',
-      text: 'What are React hooks and how do they change the way we write components?',
-      difficulty: 'medium'
-    },
-    {
-      id: '103',
-      stackId: '1',
-      text: 'Compare and contrast React Context API vs Redux for state management.',
-      difficulty: 'hard'
-    },
-    {
-      id: '104',
-      stackId: '1',
-      text: 'What is the purpose of key prop when rendering a list of elements?',
-      difficulty: 'easy'
-    },
-    {
-      id: '105',
-      stackId: '1',
-      text: 'Explain the React component lifecycle methods and their hooks equivalents.',
-      difficulty: 'medium'
-    }
-  ],
-  '2': [
-    {
-      id: '201',
-      stackId: '2',
-      text: 'What are Python generators and how do they differ from regular functions?',
-      difficulty: 'medium'
-    },
-    {
-      id: '202',
-      stackId: '2',
-      text: 'Explain decorators in Python with an example.',
-      difficulty: 'hard'
-    },
-    {
-      id: '203',
-      stackId: '2',
-      text: 'What are Python context managers and when would you use them?',
-      difficulty: 'medium'
-    },
-    {
-      id: '204',
-      stackId: '2',
-      text: 'Explain the difference between lists and tuples in Python.',
-      difficulty: 'easy'
-    },
-    {
-      id: '205',
-      stackId: '2',
-      text: 'How does memory management work in Python?',
-      difficulty: 'hard'
-    }
-  ],
-  '3': [
-    {
-      id: '301',
-      stackId: '3',
-      text: 'Explain the event loop in Node.js.',
-      difficulty: 'medium'
-    },
-    {
-      id: '302',
-      stackId: '3',
-      text: 'What is the purpose of middleware in Express.js?',
-      difficulty: 'medium'
-    },
-    {
-      id: '303',
-      stackId: '3',
-      text: 'How would you handle authentication in a Node.js application?',
-      difficulty: 'hard'
-    },
-    {
-      id: '304',
-      stackId: '3',
-      text: 'What are streams in Node.js and when would you use them?',
-      difficulty: 'hard'
-    },
-    {
-      id: '305',
-      stackId: '3',
-      text: 'Explain the difference between process.nextTick() and setImmediate().',
-      difficulty: 'medium'
-    }
-  ],
-  '4': [
-    {
-      id: '401',
-      stackId: '4',
-      text: 'Explain the difference between an interface and an abstract class in Java.',
-      difficulty: 'medium'
-    },
-    {
-      id: '402',
-      stackId: '4',
-      text: 'What are Java generics and why are they useful?',
-      difficulty: 'medium'
-    },
-    {
-      id: '403',
-      stackId: '4',
-      text: 'Explain Java memory management and garbage collection.',
-      difficulty: 'hard'
-    },
-    {
-      id: '404',
-      stackId: '4',
-      text: 'What are synchronized methods and blocks in Java?',
-      difficulty: 'medium'
-    },
-    {
-      id: '405',
-      stackId: '4',
-      text: 'Explain the concept of Java streams and functional programming in Java 8+.',
-      difficulty: 'hard'
-    }
-  ]
-};
+// Mock tech stacks removed - we now use only API data
 
 // Create the context
 const InterviewContext = createContext<InterviewContextType | undefined>(undefined);
 
-// Mock transcription function (in a real app this would use Whisper API)
-const mockTranscribe = async (audioBlob: Blob, techStack?: string): Promise<string> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  // Tech stack specific responses
-  const techStackResponses: Record<string, string[]> = {
-    'React': [
-    "React's virtual DOM is an in-memory representation of the real DOM. When state changes occur, React creates a new virtual DOM tree, compares it with the previous one (diffing), and updates only the parts that have changed in the real DOM. This process minimizes direct DOM manipulation, which is slow, resulting in better performance.",
-    "React hooks are functions that let you use state and other React features in functional components. Before hooks, stateful logic required class components. Hooks like useState and useEffect allow us to add state and lifecycle methods to functional components, making them more powerful while keeping code cleaner and more reusable.",
-      "JSX is a syntax extension for JavaScript that looks similar to HTML or XML. It allows us to write HTML structures in the same file as JavaScript code. React doesn't require JSX, but it makes the code more readable and writing templates more intuitive. Behind the scenes, JSX is transformed into regular JavaScript function calls."
-    ],
-    'Python': [
-    "Generators in Python are functions that use the yield statement to return values one at a time, suspending execution until the next value is requested. Unlike regular functions that compute all values at once and return them, generators produce values lazily, which is memory-efficient when working with large datasets.",
-      "Python uses dynamic typing, which means variable types are determined at runtime, not compile time. This allows for greater flexibility but requires more testing to catch type errors. Python 3.5+ introduced type hints, allowing developers to indicate expected types without enforcing them.",
-      "List comprehensions in Python provide a concise way to create lists based on existing sequences. They consist of an expression followed by a for clause and optional if clauses. For example, [x**2 for x in range(10) if x % 2 == 0] creates a list of squares of even numbers from 0 to 9."
-    ],
-    'Node.js': [
-    "Node.js uses an event-driven, non-blocking I/O model. The event loop allows Node.js to perform non-blocking operations despite JavaScript being single-threaded. It works by offloading operations to the system kernel whenever possible and registering callbacks to be executed when operations complete, allowing the program to handle many connections concurrently.",
-      "Express.js is a minimal and flexible Node.js web application framework that provides a robust set of features for web and mobile applications. It's designed for building web applications and APIs, and has become the standard server framework for Node.js.",
-      "Node.js package manager (npm) is the world's largest software registry, with approximately 1.3 million packages. It consists of a command line client and an online database of public and private packages. It allows developers to install, share, and manage dependencies in their applications."
-    ],
-    'Java': [
-    "In Java, an interface defines a contract of what a class can do without implementation details, while an abstract class can provide both method signatures and implementations. A class can implement multiple interfaces but extend only one abstract class. Use interfaces for unrelated classes that need to share behavior, and abstract classes for related classes that share code.",
-      "Java's garbage collection automatically handles memory management by identifying and removing objects that are no longer being used by the program. This prevents memory leaks and reduces the burden on developers. The Java Virtual Machine (JVM) has several garbage collection algorithms that can be selected based on application needs.",
-      "Java's threading model allows for concurrent execution within a single process. The Runnable interface and Thread class provide ways to create and manage threads. Java 5 introduced the java.util.concurrent package with higher-level concurrency utilities like ExecutorService, which simplifies thread management."
-    ],
-    'C': [
-      "C is a procedural programming language with static typing. Unlike object-oriented languages, C focuses on functions and has no built-in support for classes or objects. Its strength lies in its efficiency, portability, and direct access to memory through pointers.",
-      "Memory management in C is manual, requiring explicit allocation with malloc() and deallocation with free(). This gives programmers precise control but also responsibility for preventing memory leaks and dangling pointers. Modern languages often use garbage collection to automate this process.",
-      "C's preprocessor directives like #include and #define operate before compilation. #include inserts content from header files, while #define creates macros that substitute text. These powerful features enable code organization and parameterization, but can lead to subtle bugs if overused."
-    ],
-    'JavaScript': [
-      "Closures in JavaScript occur when a function retains access to its lexical scope even when executed outside that scope. This allows for data encapsulation and the creation of factory functions. Closures are commonly used in event handlers, callbacks, and for creating private variables.",
-      "Promises in JavaScript represent the eventual completion or failure of an asynchronous operation and its resulting value. They're used to handle asynchronous operations more cleanly than callbacks, avoiding 'callback hell'. The async/await syntax, built on promises, makes asynchronous code look and behave more like synchronous code.",
-      "JavaScript's prototypal inheritance differs from classical inheritance in other languages. Each object has a prototype from which it inherits properties. When accessing a property, JavaScript looks up the prototype chain until it finds the property or reaches the end. This allows for dynamic inheritance patterns."
-    ]
-  };
-  
-  // Default responses for any tech stack not specifically covered
-  const defaultResponses = [
-    "This programming language/framework offers several key features like type safety, memory management, and a rich ecosystem of libraries. Its architecture is designed to handle both simple scripts and complex applications.",
-    "The main advantage of this technology is its performance and versatility. Developers can use it for a wide range of applications, from web development to system programming, depending on the specific requirements.",
-    "Best practices include maintaining clean, modular code with proper documentation. Error handling should be comprehensive, and code should be tested thoroughly before deployment. Performance optimizations should be considered when dealing with large datasets or high traffic."
-  ];
-  
-  // Get responses for the specified tech stack, or use defaults
-  const responses = techStackResponses[techStack || ''] || defaultResponses;
-  
-  // Return a random response from the appropriate list
-  return responses[Math.floor(Math.random() * responses.length)];
-};
+// Mock transcription function has been removed - we now use real transcription
 
 // Mock AI evaluation function (in a real app this would use GPT or other LLM)
 const mockEvaluateAnswer = async (question: string, transcript: string): Promise<{ score: number, feedback: string }> => {
@@ -371,6 +165,9 @@ interface ApiAnswer {
   interview: string;
   audioUrl?: string;
   transcript?: string;
+  code?: string;
+  codeLanguage?: string;
+  codeEvaluation?: string;
   score?: number;
   feedback?: string;
   criteria?: {
@@ -441,9 +238,10 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     } catch (error) {
       console.error('Error fetching tech stacks:', error);
-      toast.error('Failed to load tech stacks, using mock data');
-      setAvailableTechStacks(mockTechStacks);
-      setQuestionsByStack(mockQuestions);
+      toast.error('Failed to load tech stacks');
+      // No longer using mock data fallbacks
+      setAvailableTechStacks([]);
+      setQuestionsByStack({});
     } finally {
       setIsLoading(false);
     }
@@ -508,11 +306,11 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (response.data && response.data.data) {
         const questions = response.data.data
   .filter((q: ApiQuestion): q is ApiQuestion & { techStack: { _id: string } | string } =>
-    !!q.techStack && ((typeof q.techStack === 'object' && !!q.techStack._id) || typeof q.techStack === 'string')
+    !!q.techStack && ((typeof q.techStack === 'object' && q.techStack !== null && '_id' in q.techStack) || typeof q.techStack === 'string')
   )
   .map((q: ApiQuestion) => ({
     id: q._id,
-    stackId: typeof q.techStack === 'object' && q.techStack !== null ? q.techStack._id : 
+    stackId: typeof q.techStack === 'object' && q.techStack !== null && '_id' in q.techStack ? q.techStack._id : 
             (typeof q.techStack === 'string' ? q.techStack : stackId),
     text: q.text,
     difficulty: q.difficulty
@@ -529,13 +327,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     } catch (error) {
       console.error(`Error fetching questions for stack ${stackId}:`, error);
-      // If API call fails, use mock data as fallback if available
-      if (mockQuestions[stackId]) {
-        setQuestionsByStack(prev => ({
-          ...prev,
-          [stackId]: mockQuestions[stackId]
-        }));
-      }
+      toast.error(`Failed to load questions for ${stackId}`);
     }
   };
 
@@ -620,26 +412,32 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       let finalTranscript = transcript;
       let score, feedback, criteria;
-      let usedMockTranscript = false; // Flag to track if mock transcript was used
+      // We no longer use mock transcripts
       
       // Get the transcription
       if (!finalTranscript) {
         try {
           if (useFreeMode) {
-            // In free mode, still use mock transcribe but mark it clearly
-            finalTranscript = await mockTranscribe(audioBlob, stack?.name);
-            usedMockTranscript = true; // Set the flag
-            finalTranscript = `[MOCK TRANSCRIPT] ${finalTranscript}`;
-            console.log('Using mock transcript (free mode):', finalTranscript.substring(0, 30));
+            // In free mode, we now use the real transcription API as well
+            const transcriptionResponse = await aiAPI.transcribe(audioBlob);
+            if (transcriptionResponse.data && transcriptionResponse.data.data) {
+              finalTranscript = transcriptionResponse.data.data.text || transcriptionResponse.data.data;
+              console.log('Using real transcript (free mode):', finalTranscript.substring(0, 30));
+            }
           } else {
             // In paid mode, always use the real transcription API
             const transcriptionResponse = await aiAPI.transcribe(audioBlob);
-            finalTranscript = transcriptionResponse.data.data;
-            
-            if (!finalTranscript) {
-              throw new Error('Transcription failed');
+            if (transcriptionResponse.data && transcriptionResponse.data.data) {
+              // Handle both response formats - either data.data.text or just data.data as the transcript
+              finalTranscript = transcriptionResponse.data.data.text || transcriptionResponse.data.data;
+              
+              if (!finalTranscript) {
+                throw new Error('Transcription failed');
+              }
+              console.log('Real transcript obtained:', finalTranscript.substring(0, 30));
+            } else {
+              throw new Error('Invalid transcription response format');
             }
-            console.log('Real transcript obtained:', finalTranscript.substring(0, 30));
           }
         } catch (error) {
           console.error('Transcription error:', error);
@@ -710,12 +508,34 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         feedback = `[MOCK EVALUATION] ${mockEval.feedback}\n\nNote: This is an auto-generated mock evaluation because the AI evaluation service failed.`;
       }
       
-      // Create answer object
+      // Extract code evaluation from feedback if available
+      let codeEvaluation = '';
+      if (code && feedback) {
+        // Look for code-specific feedback in the overall feedback
+        const codeEvalRegex = /(?:Code Assessment|Code evaluation|Code submission|Code analysis):([\s\S]*?)(?=\n\n|$)/i;
+        const match = feedback.match(codeEvalRegex);
+        if (match) {
+          codeEvaluation = match[0];
+        } else {
+          // If no specific section found, create a generic one
+          codeEvaluation = 'Code was evaluated as part of the overall response.';
+        }
+      }
+      
+      // Create answer object with properly formatted transcript
+      // Make sure transcript is a string, not an object
+      const transcriptToSave = typeof finalTranscript === 'object' && finalTranscript !== null && 'text' in finalTranscript ? 
+        finalTranscript.text as string : 
+        (typeof finalTranscript === 'string' ? finalTranscript : '');
+        
       const answer: Answer = {
-        id: Date.now().toString(),
-        questionId,
-        audioUrl,
-        transcript: finalTranscript,
+        id: Date.now().toString(), // Temporary ID
+        questionId: questionId,
+        audioUrl: audioUrl,
+        transcript: transcriptToSave,
+        code: code || '',
+        codeLanguage: codeLanguage || '',
+        codeEvaluation: codeEvaluation,  // Include code evaluation
         score,
         feedback,
         criteria
@@ -777,10 +597,15 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
         
         // Now save the answer with ALL data including evaluation in one step
+        // Ensure transcript is properly formatted as a string before saving
+        const transcriptToSave = typeof finalTranscript === 'object' && finalTranscript !== null && 'text' in finalTranscript ? 
+          finalTranscript.text as string : 
+          (typeof finalTranscript === 'string' ? finalTranscript : '');
+          
         const answerResponse = await answerAPI.create({
           interview: interviewId,
           question: questionId,
-          transcript: finalTranscript || '',
+          transcript: transcriptToSave || '',
           audioUrl: serverAudioUrl || '',
           code: code || '',
           codeLanguage: codeLanguage || 'javascript',
@@ -1037,7 +862,9 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             questionId: answer.question,
             audioUrl: answer.audioUrl,
             transcript: answer.transcript,
-            code: answer.code,
+            code: answer.code || '',
+            codeLanguage: answer.codeLanguage || '',
+            codeEvaluation: answer.codeEvaluation || '',
             score: answer.score,
             feedback: answer.feedback,
             criteria: answer.criteria

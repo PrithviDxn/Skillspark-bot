@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { useInterview } from '@/context/InterviewContext';
-import { interviewAPI, userAPI, roleAPI } from '@/api';
+import { interviewAPI, userAPI, roleAPI, emailAPI } from '@/api/index';
 import { Badge } from '@/components/ui/badge';
 
 type ScheduleFormData = {
@@ -173,7 +173,24 @@ const InterviewScheduler = () => {
       // Call the backend API to create the interview
       const response = await interviewAPI.create(payload);
       if (response.data && response.data.success && response.data.data) {
+        const interviewId = response.data.data._id;
         toast.success('Interview scheduled successfully!');
+        
+        // Send email invitation
+        try {
+          toast.info('Sending interview invitation email...');
+          const emailResponse = await emailAPI.sendInvitation(interviewId);
+          
+          if (emailResponse.data?.success) {
+            toast.success('Interview invitation email sent!');
+          } else {
+            toast.error('Failed to send invitation email. You can send it later from the interview details page.');
+          }
+        } catch (emailError) {
+          console.error('Error sending invitation email:', emailError);
+          toast.error('Failed to send invitation email. You can send it later from the interview details page.');
+        }
+        
         form.reset();
         setSelectedTechStacks([]);
         setAvailableTechStacksForRole([]);

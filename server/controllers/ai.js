@@ -110,6 +110,12 @@ export const evaluateAnswer = async (req, res, next) => {
     
     4. LENGTH CHECK: Very short answers (less than 50 words) that don't adequately address the question should receive a low score (1-2).
     
+    5. CODE EVALUATION: If code was submitted, you MUST evaluate it as part of your feedback with these criteria:
+       - Is the code correct? Does it solve the problem or implement the concept correctly?
+       - Is the code relevant to the question asked?
+       - Is the code well-structured and following best practices?
+       - Include a section in your feedback that starts with "Code Assessment:" followed by your evaluation of the code.
+    
     Evaluate this answer based on:
     1. Technical accuracy (40%)
     2. Completeness (30%)
@@ -127,6 +133,7 @@ export const evaluateAnswer = async (req, res, next) => {
     {
       "score": (a number between 1-10),
       "feedback": (detailed feedback including why the score was given and areas for improvement),
+      "codeEvaluation": (if code was submitted, provide a specific evaluation of the code starting with "Code Assessment:"; otherwise, omit this field),
       "criteria": {
         "technicalAccuracy": (score out of 10),
         "completeness": (score out of 10),
