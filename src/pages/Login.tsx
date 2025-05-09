@@ -78,10 +78,10 @@ const Login: React.FC = () => {
             </form>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <div className="text-sm text-center text-gray-600">
-              <span>Demo login credentials:</span><br />
-              <span>Admin: admin@example.com / admin123</span><br />
-              <span>Candidate: candidate@example.com / candidate123</span>
+            <div className="text-sm text-center text-gray-600 p-2 bg-gray-100 rounded-md border border-gray-200">
+              <span className="font-semibold">Default Admin Credentials:</span><br />
+              <span>Email: admin@skillspark.com</span><br />
+              <span>Password: Admin@123</span>
             </div>
             <div className="text-sm text-center text-gray-600">
               Don't have an account?{' '}

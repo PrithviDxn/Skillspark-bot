@@ -6,6 +6,7 @@ import cors from 'cors';
 import fileUpload from 'express-fileupload';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
+import './scripts/createDefaultAdmin.js';
 
 // ES Module fix for __dirname
 const __filename = fileURLToPath(import.meta.url);

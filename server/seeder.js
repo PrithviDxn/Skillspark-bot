@@ -16,12 +16,6 @@ mongoose.connect(process.env.MONGO_URI);
 // Sample users
 const users = [
   {
-    name: 'Admin User',
-    email: 'admin@example.com',
-    password: 'password123',
-    role: 'admin'
-  },
-  {
     name: 'Candidate User',
     email: 'candidate@example.com',
     password: 'password123',
