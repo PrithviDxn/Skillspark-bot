@@ -6,7 +6,7 @@ import cors from 'cors';
 import fileUpload from 'express-fileupload';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
-import './scripts/createDefaultAdmin.js';
+
 
 // ES Module fix for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -17,6 +17,9 @@ dotenv.config();
 
 // Connect to database
 connectDB();
+
+// Import database setup script (will only run if explicitly called)
+import { setupDatabase } from './scripts/setupDatabase.js';
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
