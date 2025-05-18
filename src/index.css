@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -141,3 +140,64 @@
 .microphone-wave-bar:nth-child(3) { animation-delay: 0.4s; }
 .microphone-wave-bar:nth-child(4) { animation-delay: 0.5s; }
 .microphone-wave-bar:nth-child(5) { animation-delay: 0.6s; }
+
+/* Video Call Styles */
+.video-participant {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  background-color: #1a1a1a;
+}
+
+.video-participant.local {
+  transform: scaleX(-1);
+}
+
+.video-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  height: 100%;
+}
+
+.video-controls {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1rem;
+  z-index: 10;
+}
+
+.video-controls button {
+  padding: 0.75rem;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  transition: all 0.2s;
+}
+
+.video-controls button:hover {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.video-controls button.active {
+  background-color: #ef4444;
+}
+
+.video-controls button.active:hover {
+  background-color: #dc2626;
+}

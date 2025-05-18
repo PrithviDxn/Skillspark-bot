@@ -2,9 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { InterviewProvider } from "./context/InterviewContext";
+import VideoCall from "./components/VideoCall.jsx";
 
 // Pages
 import Index from "./pages/Index";
@@ -47,6 +48,11 @@ const ProtectedRoute = ({
   
   return children;
 };
+
+function VideoCallWrapper() {
+  const { interviewId } = useParams();
+  return <VideoCall interviewId={interviewId} />;
+}
 
 const AppRoutes = () => (
   <Routes>
@@ -119,6 +125,14 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute>
           <InterviewDetails />
+        </ProtectedRoute>
+      } 
+    />
+    <Route 
+      path="/video/:interviewId" 
+      element={
+        <ProtectedRoute>
+          <VideoCallWrapper />
         </ProtectedRoute>
       } 
     />

@@ -42,6 +42,7 @@ try {
  * @param {string} options.time - Formatted interview time
  * @param {number} options.duration - Interview duration in minutes
  * @param {string} options.interviewLink - Link to join the interview
+ * @param {string} options.interviewId - Interview ID for video call
  * @returns {Promise<Object>} - Response from email service
  */
 const sendInterviewInvitation = async (options) => {
@@ -55,8 +56,14 @@ const sendInterviewInvitation = async (options) => {
     date,
     time,
     duration,
-    interviewLink
+    interviewLink,
+    interviewId
   } = options;
+
+  if (!interviewId) {
+    throw new Error('interviewId is required for sending interview invitation');
+  }
+
   try {
     // Use Resend's default domain for sending
     const fromEmail = 'onboarding@resend.dev';
@@ -64,6 +71,9 @@ const sendInterviewInvitation = async (options) => {
     const replyToEmail = process.env.RESEND_DOMAIN || 'noreply@skillspark.ai';
     console.log('Using from email:', fromEmail);
     console.log('Using reply-to email:', replyToEmail);
+    
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+    const interviewLink = `${baseUrl}/video/${interviewId}`;
     
     const result = await resend.emails.send({
       from: fromEmail,
@@ -104,7 +114,9 @@ const sendInterviewInvitation = async (options) => {
           <p style="margin-top: 30px;">Good luck!</p>
           <p>The ${companyName} Hiring Team</p>
         </div>
-      `
+      `,
+      interviewLink: interviewLink,
+      videoCallUrl: `${baseUrl}/video/${interviewId}`
     });
     
     console.log('Email sent successfully:', result);

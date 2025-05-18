@@ -115,7 +115,8 @@ const sendInterviewInvitationEmail = async (req, res, next) => {
       date: formattedDate,
       time: formattedTime,
       duration: interview.duration || 60,
-      interviewLink
+      interviewLink,
+      interviewId: interview._id.toString()
     });
     
     res.status(200).json({

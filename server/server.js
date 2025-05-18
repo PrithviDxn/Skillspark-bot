@@ -6,7 +6,7 @@ import cors from 'cors';
 import fileUpload from 'express-fileupload';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
-
+import videoRoutes from './routes/video.js';
 
 // ES Module fix for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -104,6 +104,7 @@ app.use('/api/v1/uploads', uploadRoutes);
 app.use('/api/v1/ai', aiRoutes);
 app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/email', emailRoutes);
+app.use('/api/v1/video', videoRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
