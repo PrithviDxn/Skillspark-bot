@@ -74,6 +74,7 @@ export const interviewAPI = {
     completedAt?: string;
   }) => api.put(`/interviews/${id}`, interviewData),
   delete: (id: string) => api.delete(`/interviews/${id}`),
+  join: (id: string, token: string) => api.post(`/interviews/${id}/join`, { token }),
 };
 
 // Answer endpoints

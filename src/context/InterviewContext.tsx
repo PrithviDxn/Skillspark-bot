@@ -731,19 +731,21 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (response.data && response.data.data) {
         const apiInterviews = response.data.data as ApiInterview[];
         
-        // Convert API format to our internal format
-        const formattedInterviews: Interview[] = apiInterviews.map((interview: ApiInterview) => ({
-          id: interview._id,
-          candidateId: typeof interview.candidate === 'object' ? interview.candidate._id : interview.candidate,
-          stackId: typeof interview.techStack === 'object' ? interview.techStack._id : interview.techStack,
-          status: interview.status as 'scheduled' | 'in-progress' | 'completed' | 'cancelled',
-          createdAt: interview.createdAt,
-          completedAt: interview.completedAt,
-          scheduledDate: interview.scheduledDate,
-          scheduledTime: interview.scheduledTime,
-          duration: interview.duration,
-          answers: []
-        }));
+        // Convert API format to our internal format, skip interviews with missing candidate or techStack
+        const formattedInterviews: Interview[] = apiInterviews
+          .filter((interview: ApiInterview) => interview.candidate && interview.techStack)
+          .map((interview: ApiInterview) => ({
+            id: interview._id,
+            candidateId: interview.candidate ? (typeof interview.candidate === 'object' ? interview.candidate._id : interview.candidate) : '',
+            stackId: interview.techStack ? (typeof interview.techStack === 'object' ? interview.techStack._id : interview.techStack) : '',
+            status: interview.status as 'scheduled' | 'in-progress' | 'completed' | 'cancelled',
+            createdAt: interview.createdAt,
+            completedAt: interview.completedAt,
+            scheduledDate: interview.scheduledDate,
+            scheduledTime: interview.scheduledTime,
+            duration: interview.duration,
+            answers: []
+          }));
 
         // Fetch answers for each interview
         const interviewsWithAnswers = await Promise.all(

@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type TechStack = {
   _id: string;
@@ -46,6 +47,12 @@ const TechStackManager: React.FC<TechStackManagerProps> = ({ displayFullCard = f
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [selectedTechStackId, setSelectedTechStackId] = useState('');
+  
+  // Edit dialog state
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingStack, setEditingStack] = useState<TechStack | null>(null);
+  const [editStackName, setEditStackName] = useState('');
+  const [editStackDescription, setEditStackDescription] = useState('');
   
   const { refreshTechStacks } = useInterview();
   
@@ -314,27 +321,92 @@ const TechStackManager: React.FC<TechStackManagerProps> = ({ displayFullCard = f
       {techStacks.length === 0 ? (
         <p className="text-sm text-muted-foreground">No tech stacks found. Add your first tech stack above.</p>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {techStacks.map((stack) => (
-            <Card key={stack._id} className="p-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-medium">{stack.name}</h4>
-                  <p className="text-sm text-muted-foreground">{stack.description}</p>
-                </div>
+            <Card key={stack._id} className="p-4 flex flex-col justify-between h-full">
+              <div className="flex-1">
+                <h4 className="font-medium text-lg mb-1">{stack.name}</h4>
+                <p className="text-sm text-muted-foreground mb-4">{stack.description}</p>
+              </div>
+              <div className="flex gap-2 mt-auto">
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDeleteTechStack(stack._id)}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditingStack(stack);
+                    setEditStackName(stack.name);
+                    setEditStackDescription(stack.description);
+                    setShowEditDialog(true);
+                  }}
                 >
-                  <Trash className="h-4 w-4" />
+                  <Edit className="h-4 w-4 mr-1" /> Edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDeleteTechStack(stack._id)}
+                >
+                  <Trash className="h-4 w-4 mr-1" /> Delete
                 </Button>
               </div>
             </Card>
           ))}
         </div>
       )}
+      {/* Edit Tech Stack Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Tech Stack</DialogTitle>
+            <DialogDescription>Update the name and description of the tech stack.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-stack-name">Tech Stack Name</Label>
+              <Input
+                id="edit-stack-name"
+                value={editStackName}
+                onChange={(e) => setEditStackName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-stack-description">Description</Label>
+              <Textarea
+                id="edit-stack-description"
+                value={editStackDescription}
+                onChange={(e) => setEditStackDescription(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!editingStack) return;
+                try {
+                  await techStackAPI.update(editingStack._id, {
+                    name: editStackName,
+                    description: editStackDescription
+                  });
+                  toast.success('Tech stack updated successfully');
+                  setShowEditDialog(false);
+                  await fetchTechStacks();
+                  await refreshTechStacks();
+                } catch (error) {
+                  console.error('Error updating tech stack:', error);
+                  toast.error('Failed to update tech stack');
+                }
+              }}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 

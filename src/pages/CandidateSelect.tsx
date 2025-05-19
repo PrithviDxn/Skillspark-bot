@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout';
 import { useNavigate } from 'react-router-dom';
 import { Play } from 'lucide-react';
+import { interviewAPI } from '@/api/index';
 
 const CandidateSelect: React.FC = () => {
   const { user } = useAuth();
@@ -53,17 +54,17 @@ const CandidateSelect: React.FC = () => {
     console.log('handleStart: interviewId =', interviewId, 'typeof:', typeof interviewId);
     setIsLoading(true);
     try {
-      // Call backend start endpoint
-      const res = await api.post(`/interviews/${interviewId}/start`);
+      // Call the new join endpoint to update interview status to in-progress
+      const res = await interviewAPI.join(interviewId, interviewId);
       if (res.data && res.data.success) {
         // Refresh interview in state
         await refreshInterview(interviewId);
         navigate(`/interview/${interviewId}`);
       } else {
-        alert('Could not start interview: ' + (res.data?.message || 'Unknown error'));
+        alert('Could not join interview: ' + (res.data?.message || 'Unknown error'));
       }
     } catch (err: any) {
-      alert('Could not start interview: ' + (err.response?.data?.message || err.message));
+      alert('Could not join interview: ' + (err.response?.data?.message || err.message));
     } finally {
       setIsLoading(false);
     }

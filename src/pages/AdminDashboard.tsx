@@ -12,10 +12,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Archive, Clipboard, ClipboardCheck, UserPlus, Upload, BookOpen } from 'lucide-react';
+import { Plus, Archive, Clipboard, ClipboardCheck, UserPlus, Upload, BookOpen, Pencil, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { userAPI } from '@/api';
+import { userAPI, questionAPI, interviewAPI } from '@/api';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Question } from '@/context/InterviewContext';
+import TechStackGrid from '@/components/TechStackGrid';
 
 // Add this interface for user data
 interface AdminUser {
@@ -27,10 +30,10 @@ interface AdminUser {
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { availableTechStacks, interviews, getQuestionsForStack } = useInterview();
+  const { availableTechStacks, interviews, getQuestionsForStack, refreshQuestions } = useInterview();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedStack, setSelectedStack] = useState<string>('');
-  const [selectedStackForBrowse, setSelectedStackForBrowse] = useState<string | null>(null);
+  const [selectedStackForBrowse, setSelectedStackForBrowse] = useState<string>('');
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [isLoadingAdmins, setIsLoadingAdmins] = useState(false);
   
@@ -43,6 +46,8 @@ const AdminDashboard: React.FC = () => {
   
   const completedInterviews = interviews.filter(interview => interview.status === 'completed');
   const pendingInterviews = interviews.filter(interview => interview.status !== 'completed');
+
+  const [interviewList, setInterviewList] = useState<any[]>([]);
 
   // Check for stored active tab in localStorage
   useEffect(() => {
@@ -148,6 +153,25 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  // Add polling to fetch interviews every 10 seconds
+  useEffect(() => {
+    const fetchInterviews = async () => {
+      try {
+        const response = await interviewAPI.getAll();
+        if (response.data && response.data.data) {
+          setInterviewList(response.data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching interviews:', error);
+      }
+    };
+
+    fetchInterviews(); // Initial fetch
+    const interval = setInterval(fetchInterviews, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, []);
+
   if (!user || user.role !== 'admin') {
     return (
       <Layout>
@@ -181,6 +205,64 @@ const AdminDashboard: React.FC = () => {
       case 'medium': return 'bg-yellow-100 text-yellow-800';
       case 'hard': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Add state for edit dialog
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [editQuestionText, setEditQuestionText] = useState('');
+  const [editQuestionDifficulty, setEditQuestionDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+
+  // Add state for admin user edit dialog
+  const [showAdminEditDialog, setShowAdminEditDialog] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<AdminUser | null>(null);
+  const [editAdminName, setEditAdminName] = useState('');
+  const [editAdminEmail, setEditAdminEmail] = useState('');
+  const [editAdminRole, setEditAdminRole] = useState('admin');
+
+  const handleEditAdmin = (admin: AdminUser) => {
+    setEditingAdmin(admin);
+    setEditAdminName(admin.name);
+    setEditAdminEmail(admin.email);
+    setEditAdminRole(admin.role);
+    setShowAdminEditDialog(true);
+  };
+
+  const handleDeleteAdmin = async (adminId: string) => {
+    if (!confirm('Are you sure you want to delete this administrator?')) return;
+    
+    try {
+      await userAPI.delete(adminId);
+      toast.success('Administrator deleted successfully');
+      // If the deleted admin is the current user, log out
+      if (user && user._id === adminId) {
+        // Optionally, you can use your auth context's logout method if available
+        window.location.href = '/login';
+      } else {
+        fetchAdminUsers();
+      }
+    } catch (error) {
+      console.error('Error deleting administrator:', error);
+      toast.error('Failed to delete administrator');
+    }
+  };
+
+  const handleUpdateAdmin = async () => {
+    if (!editingAdmin) return;
+    
+    try {
+      await userAPI.update(editingAdmin._id, {
+        name: editAdminName,
+        email: editAdminEmail,
+        role: editAdminRole
+      });
+      toast.success('Administrator updated successfully');
+      setShowAdminEditDialog(false);
+      fetchAdminUsers();
+    } catch (error) {
+      console.error('Error updating administrator:', error);
+      toast.error('Failed to update administrator');
     }
   };
 
@@ -225,10 +307,18 @@ const AdminDashboard: React.FC = () => {
                       <p className="text-sm text-gray-500">{admin.email}</p>
                     </div>
                     <div className="flex space-x-2">
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleEditAdmin(admin)}
+                      >
                         Edit
                       </Button>
-                      <Button variant="destructive" size="sm">
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => handleDeleteAdmin(admin._id)}
+                      >
                         Delete
                       </Button>
                     </div>
@@ -245,8 +335,55 @@ const AdminDashboard: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Admin Dialog */}
+      <Dialog open={showAdminEditDialog} onOpenChange={setShowAdminEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Administrator</DialogTitle>
+            <DialogDescription>
+              Update administrator details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-admin-name">Name</Label>
+              <Input
+                id="edit-admin-name"
+                value={editAdminName}
+                onChange={(e) => setEditAdminName(e.target.value)}
+                placeholder="Enter name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-admin-email">Email</Label>
+              <Input
+                id="edit-admin-email"
+                type="email"
+                value={editAdminEmail}
+                onChange={(e) => setEditAdminEmail(e.target.value)}
+                placeholder="Enter email"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAdminEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateAdmin}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+
+  // Find the live interview (status === 'in-progress')
+  const currentLiveInterview = interviewList.find(iv => iv.status === 'in-progress');
+
+  // Update remaining references to liveInterview
+  const liveInterview = currentLiveInterview;
 
   return (
     <Layout>
@@ -315,6 +452,32 @@ const AdminDashboard: React.FC = () => {
       
       {activeTab === 'interviews' ? (
         <div className="space-y-6">
+          {/* Live Interview Tile */}
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle>Live Interview</CardTitle>
+              <CardDescription>
+                {liveInterview ? 'An interview is currently in progress.' : 'No live interview.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {liveInterview ? (
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="font-medium mb-1">Interview ID: {liveInterview.id}</div>
+                    <div className="text-sm text-gray-600 mb-1">Tech Stack: {availableTechStacks.find(stack => stack.id === liveInterview.stackId)?.name || 'Unknown'}</div>
+                    <div className="text-sm text-gray-600 mb-1">Scheduled: {liveInterview.scheduledDate ? new Date(liveInterview.scheduledDate).toLocaleString() : 'N/A'}</div>
+                  </div>
+                  <Button className="mt-2 md:mt-0" asChild>
+                    <Link to={`/video/${liveInterview.id}`}>Join Interview</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-gray-500">No live interview at the moment.</div>
+              )}
+            </CardContent>
+          </Card>
+          {/* End Live Interview Tile */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <InterviewScheduler />
@@ -382,11 +545,20 @@ const AdminDashboard: React.FC = () => {
                               </span>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" asChild>
-                            <Link to={`/admin/report/${interview.id}`}>
-                              View
-                            </Link>
-                          </Button>
+                          <div className="flex gap-2">
+                            {interview.status === 'scheduled' && (
+                              <Button variant="default" size="sm" asChild>
+                                <Link to={`/video/${interview.id}`}>
+                                  Start Interview
+                                </Link>
+                              </Button>
+                            )}
+                            <Button variant="outline" size="sm" asChild>
+                              <Link to={`/admin/report/${interview.id}`}>
+                                View
+                              </Link>
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -550,7 +722,18 @@ const AdminDashboard: React.FC = () => {
           </div>
           
           {/* Individual Question Management - Full Width */}
-          <QuestionManager showUploadSection={false} />
+          <Card>
+            <CardHeader>
+              <CardTitle>Add Single Question</CardTitle>
+              <CardDescription>
+                Add a single question to the selected tech stack
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <QuestionManager showUploadSection={false} />
+            </CardContent>
+          </Card>
+          <TechStackGrid />
         </div>
       ) : activeTab === 'browse' ? (
         <div className="space-y-6">
@@ -600,10 +783,41 @@ const AdminDashboard: React.FC = () => {
                         <div className="flex-1">
                           <p className="font-medium">{question.text}</p>
                         </div>
-                        <div className="ml-4">
+                        <div className="ml-4 flex items-center gap-2">
                           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getDifficultyColor(question.difficulty)}`}>
                             {question.difficulty}
                           </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              // Open edit dialog
+                              setEditingQuestion(question);
+                              setEditQuestionText(question.text);
+                              setEditQuestionDifficulty(question.difficulty);
+                              setShowEditDialog(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={async () => {
+                              if (window.confirm('Are you sure you want to delete this question?')) {
+                                try {
+                                  await questionAPI.delete(question.id);
+                                  toast.success('Question deleted successfully');
+                                  await refreshQuestions(selectedStackForBrowse);
+                                } catch (error) {
+                                  console.error('Error deleting question:', error);
+                                  toast.error('Failed to delete question');
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -616,6 +830,76 @@ const AdminDashboard: React.FC = () => {
       ) : (
         renderUserManagementTab()
       )}
+
+      {/* Add Edit Question Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Question</DialogTitle>
+            <DialogDescription>
+              Make changes to the question and its difficulty level
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-question-text">Question</Label>
+              <Textarea
+                id="edit-question-text"
+                placeholder="Enter your question here..."
+                className="min-h-[100px]"
+                value={editQuestionText}
+                onChange={(e) => setEditQuestionText(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-question-difficulty">Difficulty</Label>
+              <Select 
+                value={editQuestionDifficulty} 
+                onValueChange={(value) => {
+                  if (value === 'easy' || value === 'medium' || value === 'hard') {
+                    setEditQuestionDifficulty(value);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select difficulty" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="easy">Easy</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="hard">Hard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!editingQuestion) return;
+                
+                try {
+                  await questionAPI.update(editingQuestion.id, {
+                    text: editQuestionText,
+                    difficulty: editQuestionDifficulty
+                  });
+                  toast.success('Question updated successfully');
+                  await refreshQuestions(selectedStackForBrowse);
+                  setShowEditDialog(false);
+                } catch (error) {
+                  console.error('Error updating question:', error);
+                  toast.error('Failed to update question');
+                }
+              }}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };
