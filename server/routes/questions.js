@@ -137,4 +137,101 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
   }
 });
 
+// @desc    Upload questions from file
+// @route   POST /api/v1/questions/upload
+// @access  Private/Admin
+router.post('/upload', protect, authorize('admin'), async (req, res) => {
+  try {
+    if (!req.files || !req.files.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please upload a file'
+      });
+    }
+
+    const file = req.files.file;
+    const techStackId = req.body.techStack;
+
+    if (!techStackId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please specify a tech stack'
+      });
+    }
+
+    // Check file type
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (!['txt', 'docx', 'csv'].includes(extension)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid file format. Please upload .txt, .docx, or .csv files only.'
+      });
+    }
+
+    // Read file content based on type
+    let questions = [];
+    if (extension === 'txt') {
+      const content = file.data.toString('utf-8');
+      questions = content.split('\n')
+        .filter(line => line.trim())
+        .map(line => ({
+          techStack: techStackId,
+          text: line.trim(),
+          difficulty: 'medium' // Default difficulty
+        }));
+    } else if (extension === 'csv') {
+      const content = file.data.toString('utf-8');
+      const lines = content.split('\n');
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      
+      questions = lines.slice(1)
+        .filter(line => line.trim())
+        .map(line => {
+          const values = line.split(',').map(v => v.trim());
+          return {
+            techStack: techStackId,
+            text: values[headers.indexOf('text')] || values[0],
+            difficulty: values[headers.indexOf('difficulty')] || 'medium'
+          };
+        });
+    } else if (extension === 'docx') {
+      // For docx files, we'll need to use a library like mammoth
+      // This is a placeholder for docx processing
+      return res.status(400).json({
+        success: false,
+        error: 'DOCX file processing not implemented yet'
+      });
+    }
+
+    // Validate questions
+    const validQuestions = questions.filter(q => 
+      q.text && 
+      q.text.length > 0 && 
+      ['easy', 'medium', 'hard'].includes(q.difficulty)
+    );
+
+    if (validQuestions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid questions found in the file'
+      });
+    }
+
+    // Save questions to database
+    const savedQuestions = await Question.insertMany(validQuestions);
+
+    res.status(200).json({
+      success: true,
+      count: savedQuestions.length,
+      data: savedQuestions
+    });
+  } catch (err) {
+    console.error('Error uploading questions:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
 export default router; 

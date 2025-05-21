@@ -36,6 +36,12 @@ const AdminDashboard: React.FC = () => {
   const [selectedStackForBrowse, setSelectedStackForBrowse] = useState<string>('');
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [isLoadingAdmins, setIsLoadingAdmins] = useState(false);
+
+   // Find tech stack name by ID
+   const getStackNameById = (id: string) => {
+    const stack = availableTechStacks.find(s => s.id === id);
+    return stack ? stack.name : 'Unknown';
+  };                                                      
   
   // Add sorting states
   const [pendingSortBy, setPendingSortBy] = useState<'nearest' | 'stack' | 'status'>('nearest');
@@ -90,8 +96,8 @@ const AdminDashboard: React.FC = () => {
     
     return pendingInterviews.filter((interview) => {
       const interviewDate = new Date(interview.scheduledDate);
-      const month = interviewDate.getMonth() + 1; // JS months are 0-indexed
-      return month.toString() === pendingMonthFilter;
+      const interviewMonth = `${interviewDate.getFullYear()}-${String(interviewDate.getMonth() + 1).padStart(2, '0')}`;
+      return interviewMonth === pendingMonthFilter;
     });
   }, [pendingInterviews, pendingMonthFilter]);
   
@@ -115,20 +121,27 @@ const AdminDashboard: React.FC = () => {
     });
   }, [filteredCompletedInterviews]);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Check file extension
-    const extension = file.name.split('.').pop()?.toLowerCase();
-    if (!extension || !['txt', 'docx', 'csv'].includes(extension)) {
-      toast.error('Invalid file format. Please upload .txt, .docx, or .csv files only.');
-      return;
-    }
-
-    // Demo only - in real app this would send to backend
-    toast.success(`File "${file.name}" uploaded successfully (demo)`);
-  };
+  // Sort pending interviews based on selected criteria
+  const sortedPendingInterviews = useMemo(() => {
+    return [...filteredPendingInterviews].sort((a, b) => {
+      switch (pendingSortBy) {
+        case 'nearest':
+          const dateA = new Date(a.scheduledDate);
+          const dateB = new Date(b.scheduledDate);
+          return dateA.getTime() - dateB.getTime();
+        case 'stack': {
+          const stackA = typeof a.stackId === 'string' ? getStackNameById(a.stackId) : '';
+          const stackB = typeof b.stackId === 'string' ? getStackNameById(b.stackId) : '';
+          console.log('Sorting by stack:', { a, b, stackA, stackB });
+          return String(stackA).localeCompare(String(stackB));
+        }
+        case 'status':
+          return a.status.localeCompare(b.status);
+        default:
+          return 0;
+      }
+    });
+  }, [filteredPendingInterviews, pendingSortBy]);
 
   useEffect(() => {
     if (activeTab === 'users') {
@@ -192,11 +205,7 @@ const AdminDashboard: React.FC = () => {
     return getQuestionsForStack(selectedStackForBrowse);
   };
 
-  // Find tech stack name by ID
-  const getStackNameById = (id: string) => {
-    const stack = availableTechStacks.find(s => s.id === id);
-    return stack ? stack.name : 'Unknown';
-  };
+ 
 
   // Find difficulty color class
   const getDifficultyColor = (difficulty: string) => {
@@ -452,126 +461,138 @@ const AdminDashboard: React.FC = () => {
       
       {activeTab === 'interviews' ? (
         <div className="space-y-6">
-          {/* Live Interview Tile */}
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle>Live Interview</CardTitle>
-              <CardDescription>
-                {liveInterview ? 'An interview is currently in progress.' : 'No live interview.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {liveInterview ? (
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <div className="font-medium mb-1">Interview ID: {liveInterview.id}</div>
-                    <div className="text-sm text-gray-600 mb-1">Tech Stack: {availableTechStacks.find(stack => stack.id === liveInterview.stackId)?.name || 'Unknown'}</div>
-                    <div className="text-sm text-gray-600 mb-1">Scheduled: {liveInterview.scheduledDate ? new Date(liveInterview.scheduledDate).toLocaleString() : 'N/A'}</div>
-                  </div>
-                  <Button className="mt-2 md:mt-0" asChild>
-                    <Link to={`/video/${liveInterview.id}`}>Join Interview</Link>
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-gray-500">No live interview at the moment.</div>
-              )}
-            </CardContent>
-          </Card>
-          {/* End Live Interview Tile */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div>
               <InterviewScheduler />
             </div>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Pending Interviews</CardTitle>
+            <div className="flex flex-col h-full gap-2">
+              <Card className="flex-1 flex flex-col justify-between">
+                <CardHeader>
+                  <CardTitle>Live Interview</CardTitle>
                   <CardDescription>
-                    Interviews that are scheduled or in progress
+                    {liveInterview ? 'An interview is currently in progress.' : 'No live interview.'}
                   </CardDescription>
-                </div>
-                <div className="flex space-x-2">
-                  <Select value={pendingMonthFilter} onValueChange={setPendingMonthFilter}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Filter by Month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Months</SelectItem>
-                      {getLast12Months().map(month => (
-                        <SelectItem key={month.value} value={month.value}>
-                          {month.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={pendingSortBy} onValueChange={(value: 'nearest' | 'stack' | 'status') => setPendingSortBy(value)}>
-                    <SelectTrigger className="w-[160px]">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="nearest">Nearest Date</SelectItem>
-                      <SelectItem value="stack">Tech Stack</SelectItem>
-                      <SelectItem value="status">Status</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {filteredPendingInterviews.length > 0 ? (
-                  <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
-                    {filteredPendingInterviews.map(interview => {
-                      const techStack = availableTechStacks.find(
-                        stack => stack.id === interview.stackId
-                      );
-                      
-                      return (
-                        <div 
-                          key={interview.id} 
-                          className="p-4 border rounded-md flex justify-between items-center"
-                        >
-                          <div>
-                            <p className="font-medium">
-                              {techStack?.name || 'Unknown'} Interview
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              Scheduled: {interview.scheduledDate
-                                ? new Date(interview.scheduledDate).toLocaleString()
-                                : 'N/A'}
-                            </p>
-                            <div className="mt-1">
-                              <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
-                                {interview.status}
-                              </span>
+                </CardHeader>
+                <CardContent className={liveInterview ? "" : "py-2"}>
+                  {liveInterview ? (
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="font-medium mb-1">Interview ID: {liveInterview.id}</div>
+                        <div className="text-sm text-gray-600 mb-1">Tech Stack: {availableTechStacks.find(stack => stack.id === liveInterview.stackId)?.name || 'Unknown'}</div>
+                        <div className="text-sm text-gray-600 mb-1">Scheduled: {liveInterview.scheduledDate ? new Date(liveInterview.scheduledDate).toLocaleString() : 'N/A'}</div>
+                      </div>
+                      <Button className="mt-2 md:mt-0" asChild>
+                        <Link to={`/video/${liveInterview.id}`}>Join Interview</Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 text-sm">No live interview at the moment.</div>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="self-start">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Pending Interviews</CardTitle>
+                    <CardDescription>
+                      Interviews that are scheduled or in progress
+                    </CardDescription>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Select 
+                      value={pendingMonthFilter} 
+                      onValueChange={(value) => {
+                        setPendingMonthFilter(value);
+                        setPendingSortBy('nearest');
+                      }}
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Filter by Month" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Months</SelectItem>
+                        {getLast12Months().map(month => (
+                          <SelectItem key={month.value} value={month.value}>
+                            {month.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select 
+                      value={pendingSortBy} 
+                      onValueChange={(value) => setPendingSortBy(value as 'nearest' | 'stack' | 'status')}
+                    >
+                      <SelectTrigger className="w-[160px]">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nearest">Nearest Date</SelectItem>
+                        <SelectItem value="stack">Tech Stack</SelectItem>
+                        <SelectItem value="status">Status</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {sortedPendingInterviews.length > 0 ? (
+                    <div
+                      className={
+                        "space-y-4 pr-2 [&>*:last-child]:mb-0" +
+                        (sortedPendingInterviews.length > 3 ? " max-h-80 overflow-y-auto" : "")
+                      }
+                    >
+                      {sortedPendingInterviews.map(interview => {
+                        const techStack = availableTechStacks.find(
+                          stack => stack.id === interview.stackId
+                        );
+                        return (
+                          <div 
+                            key={interview.id} 
+                            className="p-4 border rounded-md flex justify-between items-center"
+                          >
+                            <div>
+                              <p className="font-medium">
+                                {techStack?.name || 'Unknown'} Interview
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                Scheduled: {interview.scheduledDate
+                                  ? new Date(interview.scheduledDate).toLocaleString()
+                                  : 'N/A'}
+                              </p>
+                              <div className="mt-1">
+                                <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+                                  {interview.status}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex gap-2">
-                            {interview.status === 'scheduled' && (
-                              <Button variant="default" size="sm" asChild>
-                                <Link to={`/video/${interview.id}`}>
-                                  Start Interview
+                            <div className="flex gap-2">
+                              {interview.status === 'scheduled' && (
+                                <Button variant="default" size="sm" asChild>
+                                  <Link to={`/video/${interview.id}`}>
+                                    Start Interview
+                                  </Link>
+                                </Button>
+                              )}
+                              <Button variant="outline" size="sm" asChild>
+                                <Link to={`/admin/report/${interview.id}`}>
+                                  View
                                 </Link>
                               </Button>
-                            )}
-                            <Button variant="outline" size="sm" asChild>
-                              <Link to={`/admin/report/${interview.id}`}>
-                                View
-                              </Link>
-                            </Button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <Clipboard className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-semibold">No pending interviews</h3>
-                    <p className="mt-1 text-sm">Start a new interview with a candidate</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Clipboard className="mx-auto h-12 w-12 text-gray-400" />
+                      <h3 className="mt-2 text-sm font-semibold">No pending interviews</h3>
+                      <p className="mt-1 text-sm">Start a new interview with a candidate</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       ) : activeTab === 'reports' ? (
@@ -680,43 +701,7 @@ const AdminDashboard: React.FC = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="stack-select">Select Tech Stack</Label>
-                    <Select value={selectedStack} onValueChange={setSelectedStack}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a tech stack" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableTechStacks.map((stack) => (
-                          <SelectItem key={stack.id} value={stack.id}>
-                            {stack.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="file-upload">Upload File</Label>
-                    <div className="flex items-center gap-4">
-                      <Input
-                        id="file-upload"
-                        type="file"
-                        accept=".txt,.docx,.csv"
-                        className="flex-1"
-                        onChange={handleFileUpload}
-                      />
-                      <Button variant="secondary">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Upload
-                      </Button>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Supported formats: .txt, .docx, .csv
-                    </p>
-                  </div>
-                </div>
+                <QuestionManager showUploadSection={true} />
               </CardContent>
             </Card>
           </div>
@@ -730,7 +715,7 @@ const AdminDashboard: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <QuestionManager showUploadSection={false} />
+              <QuestionManager showUploadSection={true} />
             </CardContent>
           </Card>
           <TechStackGrid />

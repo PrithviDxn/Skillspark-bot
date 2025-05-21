@@ -15,25 +15,49 @@ interface QuestionManagerProps {
 }
 
 const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = true }) => {
+  console.log("QuestionManager loaded!");
+
   const { availableTechStacks, refreshQuestions } = useInterview();
   const [selectedStack, setSelectedStack] = useState<string>('');
   const [questionText, setQuestionText] = useState<string>('');
   const [difficulty, setDifficulty] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    setSelectedFile(file || null);
+  };
 
+  const handleUploadClick = async () => {
+    if (!selectedFile) {
+      toast.error('Please select a file');
+      return;
+    }
     // Check file extension
-    const extension = file.name.split('.').pop()?.toLowerCase();
+    const extension = selectedFile.name.split('.').pop()?.toLowerCase();
     if (!extension || !['txt', 'docx', 'csv'].includes(extension)) {
       toast.error('Invalid file format. Please upload .txt, .docx, or .csv files only.');
       return;
     }
-
-    // Demo only - in real app this would send to backend
-    toast.success(`File "${file.name}" uploaded successfully (demo)`);
+    if (!selectedStack) {
+      toast.error('Please select a tech stack first');
+      return;
+    }
+    try {
+      const response = await questionAPI.uploadFile(selectedFile, selectedStack);
+      if (response.data && response.data.success) {
+        toast.success(`Successfully uploaded ${response.data.count} questions`);
+        setSelectedFile(null);
+        // Refresh questions for this stack
+        await refreshQuestions(selectedStack);
+      } else {
+        toast.error('Failed to upload questions');
+      }
+    } catch (error) {
+      console.error('Error uploading questions:', error);
+      toast.error('Failed to upload questions');
+    }
   };
 
   const handleSingleQuestion = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -111,7 +135,6 @@ const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = t
                   </SelectContent>
                 </Select>
               </div>
-              
               <div className="space-y-2">
                 <Label htmlFor="file-upload">Upload File</Label>
                 <div className="flex items-center gap-4">
@@ -120,9 +143,9 @@ const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = t
                     type="file"
                     accept=".txt,.docx,.csv"
                     className="flex-1"
-                    onChange={handleFileUpload}
+                    onChange={handleFileChange}
                   />
-                  <Button variant="secondary">
+                  <Button variant="secondary" onClick={handleUploadClick}>
                     <Upload className="w-4 h-4 mr-2" />
                     Upload
                   </Button>

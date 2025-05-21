@@ -76,6 +76,7 @@ type InterviewContextType = {
   refreshQuestions: (stackId: string) => Promise<void>;
   useFreeMode: boolean;
   setUseFreeMode: React.Dispatch<React.SetStateAction<boolean>>;
+  fetchInterviews: () => Promise<void>;
 };
 
 // Mock tech stacks removed - we now use only API data
@@ -176,6 +177,13 @@ interface ApiAnswer {
     clarity: number;
     examples: number;
   }
+}
+
+// Helper to always return a string id
+function safeId(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'object' && '_id' in val) return val._id ?? '';
+  return typeof val === 'string' ? val : '';
 }
 
 export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -305,16 +313,24 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       console.log(`[fetchQuestionsForStack] API response for stackId ${stackId}:`, response.data);
       if (response.data && response.data.data) {
         const questions = response.data.data
-  .filter((q: ApiQuestion): q is ApiQuestion & { techStack: { _id: string } | string } =>
-    !!q.techStack && ((typeof q.techStack === 'object' && q.techStack !== null && '_id' in q.techStack) || typeof q.techStack === 'string')
-  )
-  .map((q: ApiQuestion) => ({
-    id: q._id,
-    stackId: typeof q.techStack === 'object' && q.techStack !== null && '_id' in q.techStack ? q.techStack._id : 
-            (typeof q.techStack === 'string' ? q.techStack : stackId),
-    text: q.text,
-    difficulty: q.difficulty
-  }));
+          .filter((q: ApiQuestion) => q.techStack !== null && q.techStack !== undefined)
+          .map((q: ApiQuestion) => {
+            let stackIdValue = stackId;
+            if (q.techStack !== null && q.techStack !== undefined) {
+              const techStack = q.techStack;
+              if (typeof (techStack as unknown as object) === 'object' && '_id' in (techStack as unknown as { _id: string })) {
+                stackIdValue = (techStack as unknown as { _id: string })._id ?? '';
+              } else if (typeof techStack === 'string') {
+                stackIdValue = techStack;
+              }
+            }
+            return {
+              id: q._id,
+              stackId: stackIdValue,
+              text: q.text,
+              difficulty: q.difficulty
+            };
+          });
         console.log(`[fetchQuestionsForStack] Mapped questions for stackId ${stackId}:`, questions);
         setQuestionsByStack(prev => {
           const updated = {
@@ -367,8 +383,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Type guard: ensure stackId and candidateId are strings
       const safeInterview = {
         ...refreshed,
-        stackId: typeof refreshed.stackId === 'object' && refreshed.stackId !== null ? (refreshed.stackId._id || '') : refreshed.stackId,
-        candidateId: typeof refreshed.candidateId === 'object' && refreshed.candidateId !== null ? (refreshed.candidateId._id || '') : refreshed.candidateId,
+        stackId: safeId(refreshed?.stackId),
+        candidateId: safeId(refreshed?.candidateId),
       };
       setInterviews(prev => [...prev, safeInterview]);
       setCurrentInterview(safeInterview);
@@ -524,9 +540,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       // Create answer object with properly formatted transcript
       // Make sure transcript is a string, not an object
-      const transcriptToSave = typeof finalTranscript === 'object' && finalTranscript !== null && 'text' in finalTranscript ? 
-        finalTranscript.text as string : 
-        (typeof finalTranscript === 'string' ? finalTranscript : '');
+      const transcriptToSave = finalTranscript ?? '';
         
       const answer: Answer = {
         id: Date.now().toString(), // Temporary ID
@@ -598,14 +612,12 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         
         // Now save the answer with ALL data including evaluation in one step
         // Ensure transcript is properly formatted as a string before saving
-        const transcriptToSave = typeof finalTranscript === 'object' && finalTranscript !== null && 'text' in finalTranscript ? 
-          finalTranscript.text as string : 
-          (typeof finalTranscript === 'string' ? finalTranscript : '');
+        const transcriptToSave = finalTranscript ?? '';
           
         const answerResponse = await answerAPI.create({
           interview: interviewId,
           question: questionId,
-          transcript: transcriptToSave || '',
+          transcript: transcriptToSave,
           audioUrl: serverAudioUrl || '',
           code: code || '',
           codeLanguage: codeLanguage || 'javascript',
@@ -924,7 +936,8 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         refreshRoles,
         refreshQuestions,
         useFreeMode,
-        setUseFreeMode
+        setUseFreeMode,
+        fetchInterviews
       }}
     >
       {children}

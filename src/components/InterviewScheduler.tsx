@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,7 +39,7 @@ type TechStack = {
 };
 
 const InterviewScheduler = () => {
-  const { availableTechStacks, refreshTechStacks } = useInterview();
+  const { availableTechStacks, refreshTechStacks, fetchInterviews } = useInterview();
   const { refreshInterview } = useInterview();
   const { interviews } = useInterview();
   const [roles, setRoles] = useState<Role[]>([]);
@@ -195,9 +194,7 @@ const InterviewScheduler = () => {
         setSelectedTechStacks([]);
         setAvailableTechStacksForRole([]);
         // Refresh the interview list so the new interview appears
-        if (typeof refreshTechStacks === 'function') {
-          await refreshTechStacks(); // refreshes interviews as well on mount
-        }
+        await fetchInterviews();
       } else {
         toast.error('Failed to schedule interview.');
       }

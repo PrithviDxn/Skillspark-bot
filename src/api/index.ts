@@ -56,6 +56,16 @@ export const questionAPI = {
   update: (id: string, questionData: { text?: string; difficulty?: string }) =>
     api.put(`/questions/${id}`, questionData),
   delete: (id: string) => api.delete(`/questions/${id}`),
+  uploadFile: (file: File, techStackId: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('techStack', techStackId);
+    return api.post('/questions/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  }
 };
 
 // Interview endpoints
