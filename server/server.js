@@ -23,16 +23,18 @@ import emailRoutes from './routes/email.js';
 const app = express();
 
 // CORS middleware for Vercel frontend
-const allowedOrigins = ['https://skill-spark-interview-ai-prithvis-projects-95584e4f.vercel.app'];
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    // Allow localhost for local dev
+    if (!origin || origin.startsWith('http://localhost')) return callback(null, true);
+    // Allow your main Vercel domain and all preview deployments
+    if (
+      origin.endsWith('.vercel.app') ||
+      origin === 'https://skill-spark-interview-ai-prithvis-projects-95584e4f.vercel.app'
+    ) {
+      return callback(null, true);
     }
-    return callback(null, true);
+    return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true
 }));
