@@ -44,19 +44,29 @@ const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = t
       toast.error('Please select a tech stack first');
       return;
     }
+
+    setIsSubmitting(true);
     try {
       const response = await questionAPI.uploadFile(selectedFile, selectedStack);
       if (response.data && response.data.success) {
         toast.success(`Successfully uploaded ${response.data.count} questions`);
+        // Reset form state
         setSelectedFile(null);
+        // Reset file input
+        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+        if (fileInput) {
+          fileInput.value = '';
+        }
         // Refresh questions for this stack
         await refreshQuestions(selectedStack);
       } else {
-        toast.error('Failed to upload questions');
+        toast.error(response.data?.error || 'Failed to upload questions');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading questions:', error);
-      toast.error('Failed to upload questions');
+      toast.error(error.response?.data?.error || 'Failed to upload questions');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -144,10 +154,15 @@ const QuestionManager: React.FC<QuestionManagerProps> = ({ showUploadSection = t
                     accept=".txt,.docx,.csv"
                     className="flex-1"
                     onChange={handleFileChange}
+                    disabled={isSubmitting}
                   />
-                  <Button variant="secondary" onClick={handleUploadClick}>
+                  <Button 
+                    variant="secondary" 
+                    onClick={handleUploadClick}
+                    disabled={isSubmitting || !selectedFile}
+                  >
                     <Upload className="w-4 h-4 mr-2" />
-                    Upload
+                    {isSubmitting ? 'Uploading...' : 'Upload'}
                   </Button>
                 </div>
                 <p className="text-sm text-muted-foreground">

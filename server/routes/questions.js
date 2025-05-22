@@ -1,6 +1,7 @@
 import express from 'express';
 import Question from '../models/Question.js';
 import { protect, authorize } from '../middleware/auth.js';
+import fs from 'fs';
 
 const router = express.Router();
 
@@ -152,6 +153,10 @@ router.post('/upload', protect, authorize('admin'), async (req, res) => {
     const file = req.files.file;
     const techStackId = req.body.techStack;
 
+    console.log('File name:', file.name);
+    console.log('File data length:', file.data.length);
+    console.log('File data preview:', file.data.toString('utf-8').slice(0, 200));
+
     if (!techStackId) {
       return res.status(400).json({
         success: false,
@@ -171,7 +176,7 @@ router.post('/upload', protect, authorize('admin'), async (req, res) => {
     // Read file content based on type
     let questions = [];
     if (extension === 'txt') {
-      const content = file.data.toString('utf-8');
+      const content = fs.readFileSync(file.tempFilePath, 'utf-8');
       questions = content.split('\n')
         .filter(line => line.trim())
         .map(line => ({
@@ -180,9 +185,12 @@ router.post('/upload', protect, authorize('admin'), async (req, res) => {
           difficulty: 'medium' // Default difficulty
         }));
     } else if (extension === 'csv') {
-      const content = file.data.toString('utf-8');
+      const content = fs.readFileSync(file.tempFilePath, 'utf-8');
       const lines = content.split('\n');
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+      console.log('Lines:', lines);
+      console.log('Headers:', headers); 
       
       questions = lines.slice(1)
         .filter(line => line.trim())

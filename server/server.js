@@ -78,7 +78,7 @@ app.use(fileUpload({
   useTempFiles: true,
   tempFileDir: path.join(__dirname, 'tmp'),
   createParentPath: true,
-  debug: true,
+  debug: false,
   abortOnLimit: true,
   parseNested: true, // Enable parsing of nested objects
   safeFileNames: true, // Replace special characters in filenames

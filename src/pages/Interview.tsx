@@ -418,14 +418,14 @@ const Interview: React.FC = () => {
           console.log('Sending to AI for evaluation:', {
             question: currentQuestion.text,
             transcript: actualTranscript,
-            techStack: currentInterview.stackName,
+            techStack: techStackName,
             code: showCodeEditor ? code : undefined
           });
           
           const evaluationResponse = await aiAPI.evaluate({
             question: currentQuestion.text,
             transcript: actualTranscript || 'No verbal response provided.',
-            techStack: currentInterview.stackName,
+            techStack: techStackName,
             code: showCodeEditor ? code : undefined
           });
           

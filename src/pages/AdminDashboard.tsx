@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useInterview } from '@/context/InterviewContext';
 import { useAuth } from '@/context/AuthContext';
 import Layout from '@/components/Layout';
@@ -30,7 +30,7 @@ interface AdminUser {
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { availableTechStacks, interviews, getQuestionsForStack, refreshQuestions } = useInterview();
+  const { availableTechStacks, interviews, getQuestionsForStack, refreshQuestions, fetchInterviews } = useInterview();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedStack, setSelectedStack] = useState<string>('');
   const [selectedStackForBrowse, setSelectedStackForBrowse] = useState<string>('');
@@ -54,6 +54,16 @@ const AdminDashboard: React.FC = () => {
   const pendingInterviews = interviews.filter(interview => interview.status !== 'completed');
 
   const [interviewList, setInterviewList] = useState<any[]>([]);
+
+  // Ref and state to sync Pending Interviews card height to Schedule Interview card
+  const scheduleCardRef = useRef<HTMLDivElement>(null);
+  const [pendingCardHeight, setPendingCardHeight] = useState<number | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    if (scheduleCardRef.current) {
+      setPendingCardHeight(scheduleCardRef.current.offsetHeight);
+    }
+  }, [availableTechStacks, adminUsers, pendingInterviews.length]);
 
   // Check for stored active tab in localStorage
   useEffect(() => {
@@ -142,6 +152,24 @@ const AdminDashboard: React.FC = () => {
       }
     });
   }, [filteredPendingInterviews, pendingSortBy]);
+
+  // Ref for the latest scheduled interview
+  const latestScheduledRef = useRef<HTMLDivElement>(null);
+
+  // Find the interview with the latest scheduledDate
+  const latestScheduledInterviewId = useMemo(() => {
+    if (sortedPendingInterviews.length === 0) return null;
+    return sortedPendingInterviews.reduce((latest, curr) => {
+      return new Date(curr.scheduledDate) > new Date(latest.scheduledDate) ? curr : latest;
+    }, sortedPendingInterviews[0]).id;
+  }, [sortedPendingInterviews]);
+
+  // Scroll into view when the list updates
+  useEffect(() => {
+    if (latestScheduledRef.current) {
+      latestScheduledRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [sortedPendingInterviews.length, latestScheduledInterviewId]);
 
   useEffect(() => {
     if (activeTab === 'users') {
@@ -461,36 +489,25 @@ const AdminDashboard: React.FC = () => {
       
       {activeTab === 'interviews' ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left column: Schedule Interview */}
             <div>
-              <InterviewScheduler />
-            </div>
-            <div className="flex flex-col h-full gap-2">
-              <Card className="flex-1 flex flex-col justify-between">
+              <Card ref={scheduleCardRef} style={{ height: '732px' }}>
                 <CardHeader>
-                  <CardTitle>Live Interview</CardTitle>
+                  <CardTitle>Schedule Interview</CardTitle>
                   <CardDescription>
-                    {liveInterview ? 'An interview is currently in progress.' : 'No live interview.'}
+                    Schedule an interview for a candidate
                   </CardDescription>
                 </CardHeader>
-                <CardContent className={liveInterview ? "" : "py-2"}>
-                  {liveInterview ? (
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <div className="font-medium mb-1">Interview ID: {liveInterview.id}</div>
-                        <div className="text-sm text-gray-600 mb-1">Tech Stack: {availableTechStacks.find(stack => stack.id === liveInterview.stackId)?.name || 'Unknown'}</div>
-                        <div className="text-sm text-gray-600 mb-1">Scheduled: {liveInterview.scheduledDate ? new Date(liveInterview.scheduledDate).toLocaleString() : 'N/A'}</div>
-                      </div>
-                      <Button className="mt-2 md:mt-0" asChild>
-                        <Link to={`/video/${liveInterview.id}`}>Join Interview</Link>
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-gray-500 text-sm">No live interview at the moment.</div>
-                  )}
+                <CardContent>
+                  <InterviewScheduler />
                 </CardContent>
               </Card>
-              <Card className="self-start">
+            </div>
+            {/* Right column: Pending Interviews (top) */}
+            <div>
+              {/* Pending Interviews: fixed height to match Schedule Interview, now at the top */}
+              <Card style={{ height: '732px' }}>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                     <CardTitle>Pending Interviews</CardTitle>
@@ -533,21 +550,18 @@ const AdminDashboard: React.FC = () => {
                     </Select>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent style={{ height: '660px', paddingTop: 0 }}>
                   {sortedPendingInterviews.length > 0 ? (
-                    <div
-                      className={
-                        "space-y-4 pr-2 [&>*:last-child]:mb-0" +
-                        (sortedPendingInterviews.length > 3 ? " max-h-80 overflow-y-auto" : "")
-                      }
-                    >
+                    <div className="h-full overflow-y-auto space-y-4 pr-2 [&>*:last-child]:mb-0">
                       {sortedPendingInterviews.map(interview => {
                         const techStack = availableTechStacks.find(
                           stack => stack.id === interview.stackId
                         );
+                        const isLatest = interview.id === latestScheduledInterviewId;
                         return (
                           <div 
                             key={interview.id} 
+                            ref={isLatest ? latestScheduledRef : undefined}
                             className="p-4 border rounded-md flex justify-between items-center"
                           >
                             <div>
@@ -701,7 +715,7 @@ const AdminDashboard: React.FC = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <QuestionManager showUploadSection={true} />
+                <QuestionManager showUploadSection={false} />
               </CardContent>
             </Card>
           </div>
@@ -715,7 +729,7 @@ const AdminDashboard: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <QuestionManager showUploadSection={true} />
+              <QuestionManager showUploadSection={false} />
             </CardContent>
           </Card>
           <TechStackGrid />
