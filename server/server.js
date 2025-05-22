@@ -55,6 +55,8 @@ if (!fs.existsSync(tempDir)) {
   }
 }
 
+const app = express();
+
 // CORS middleware for Vercel frontend
 const allowedOrigins = ['https://skill-spark-interview-ai-prithvis-projects-95584e4f.vercel.app'];
 app.use(cors({
