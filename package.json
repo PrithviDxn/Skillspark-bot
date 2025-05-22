@@ -13,7 +13,9 @@
     "server:dev": "nodemon server/server.js",
     "seed": "node server/seeder.js -i",
     "seed:delete": "node server/seeder.js -d",
-    "dev:all": "concurrently \"npm run dev\" \"npm run server:dev\""
+    "dev:all": "concurrently \"npm run dev\" \"npm run server:dev\"",
+    "predeploy": "npm install",
+    "start": "node server/server.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
