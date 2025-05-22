@@ -92,7 +92,7 @@ const VideoCall = ({ interviewId }) => {
 
     const fetchToken = async () => {
       try {
-        console.log('Fetching video token for interview:', interviewId);
+        console.log('[VideoCall] Fetching video token for interview:', interviewId, 'User:', user?.email, 'UserID:', user?._id);
         const response = await fetch(`/api/v1/video/room/${interviewId}`, {
           method: 'POST',
           headers: {
@@ -101,7 +101,7 @@ const VideoCall = ({ interviewId }) => {
           }
         });
         const data = await response.json();
-        console.log('Token response:', data);
+        console.log('[VideoCall] Token response:', data);
         
         if (data.success && mounted) {
           await connectToRoom(data.data.token);
@@ -110,11 +110,11 @@ const VideoCall = ({ interviewId }) => {
             setIsWaitingForCandidate(true);
           }
         } else {
-          console.error('Failed to get video token:', data);
+          console.error('[VideoCall] Failed to get video token:', data);
           setError('Failed to get video access token');
         }
       } catch (error) {
-        console.error('Error fetching token:', error);
+        console.error('[VideoCall] Error fetching token:', error);
         setError('Failed to connect to video call');
       } finally {
         if (mounted) {
@@ -175,13 +175,14 @@ const VideoCall = ({ interviewId }) => {
   // Update waiting room state when participants change
   useEffect(() => {
     if (user?.role === 'admin') {
+      console.log('[VideoCall] Admin remoteParticipants.length:', remoteParticipants.length, remoteParticipants.map(p => p.identity));
       setIsWaitingForCandidate(remoteParticipants.length === 0);
     }
   }, [remoteParticipants, user?.role]);
 
   const connectToRoom = async (token) => {
     try {
-      console.log('Attempting to connect to room with token');
+      console.log('[VideoCall] Attempting to connect to room with token. InterviewId:', interviewId, 'User:', user?.email, 'UserID:', user?._id);
       
       // Clean up any existing connections first
       if (room) {
@@ -223,7 +224,7 @@ const VideoCall = ({ interviewId }) => {
         return;
       }
 
-      console.log('Connecting to Twilio room...');
+      console.log('[VideoCall] Connecting to Twilio room...');
       const newRoom = await connect(token, {
         name: `interview-${interviewId}`,
         audio: true,
@@ -232,21 +233,21 @@ const VideoCall = ({ interviewId }) => {
           height: { ideal: 720 }
         }
       });
-      console.log('Successfully connected to room:', newRoom.sid);
+      console.log('[VideoCall] Successfully connected to room:', newRoom.sid, 'Room name:', newRoom.name, 'Local identity:', newRoom.localParticipant.identity);
 
       setRoom(newRoom);
       setLocalParticipant(newRoom.localParticipant);
-      console.log('Local participant tracks:', Array.from(newRoom.localParticipant.tracks.values()));
+      console.log('[VideoCall] Local participant tracks:', Array.from(newRoom.localParticipant.tracks.values()));
 
       // Attach local participant tracks immediately if available
       newRoom.localParticipant.tracks.forEach(publication => {
         if (publication.track) {
-          console.log('Attaching local track:', publication.track.kind);
+          console.log('[VideoCall] Attaching local track:', publication.track.kind);
           tracksRef.current.add(publication.track);
           addTrackToDOM(publication.track, true);
         }
         publication.on('subscribed', track => {
-          console.log('Local track subscribed:', track.kind);
+          console.log('[VideoCall] Local track subscribed:', track.kind);
           tracksRef.current.add(track);
           addTrackToDOM(track, true);
         });
@@ -254,15 +255,15 @@ const VideoCall = ({ interviewId }) => {
 
       // Attach remote participants' tracks
       newRoom.participants.forEach(participant => {
-        console.log('Attaching tracks for remote participant:', participant.identity);
+        console.log('[VideoCall] Attaching tracks for remote participant:', participant.identity);
         participant.tracks.forEach(publication => {
           if (publication.track) {
-            console.log('Attaching remote track:', publication.track.kind);
+            console.log('[VideoCall] Attaching remote track:', publication.track.kind);
             tracksRef.current.add(publication.track);
             addTrackToDOM(publication.track, false);
           }
           publication.on('subscribed', track => {
-            console.log('Remote track subscribed:', track.kind);
+            console.log('[VideoCall] Remote track subscribed:', track.kind);
             tracksRef.current.add(track);
             addTrackToDOM(track, false);
           });
@@ -271,16 +272,16 @@ const VideoCall = ({ interviewId }) => {
 
       // Listen for new remote participants
       newRoom.on('participantConnected', participant => {
-        console.log('New participant connected:', participant.identity);
+        console.log('[VideoCall] New participant connected:', participant.identity);
         setRemoteParticipants(prev => [...prev, participant]);
         participant.tracks.forEach(publication => {
           if (publication.track) {
-            console.log('Attaching new participant track:', publication.track.kind);
+            console.log('[VideoCall] Attaching new participant track:', publication.track.kind);
             tracksRef.current.add(publication.track);
             addTrackToDOM(publication.track, false);
           }
           publication.on('subscribed', track => {
-            console.log('New participant track subscribed:', track.kind);
+            console.log('[VideoCall] New participant track subscribed:', track.kind);
             tracksRef.current.add(track);
             addTrackToDOM(track, false);
           });
@@ -289,27 +290,27 @@ const VideoCall = ({ interviewId }) => {
 
       // Listen for participant disconnection
       newRoom.on('participantDisconnected', participant => {
-        console.log('Participant disconnected:', participant.identity);
+        console.log('[VideoCall] Participant disconnected:', participant.identity);
         setRemoteParticipants(prev => prev.filter(p => p !== participant));
         removeParticipantTracks(participant);
       });
 
       // Listen for track subscriptions (for all participants)
       newRoom.on('trackSubscribed', (track, publication, participant) => {
-        console.log('Track subscribed:', track.kind, 'from participant:', participant.identity);
+        console.log('[VideoCall] Track subscribed:', track.kind, 'from participant:', participant.identity);
         tracksRef.current.add(track);
         addTrackToDOM(track, participant === newRoom.localParticipant);
       });
 
       newRoom.on('trackUnsubscribed', (track, publication, participant) => {
-        console.log('Track unsubscribed:', track.kind, 'from participant:', participant.identity);
+        console.log('[VideoCall] Track unsubscribed:', track.kind, 'from participant:', participant.identity);
         tracksRef.current.delete(track);
         removeTrackFromDOM(track);
       });
 
       // Handle room disconnection
       newRoom.on('disconnected', () => {
-        console.log('Room disconnected');
+        console.log('[VideoCall] Room disconnected');
         setRoom(null);
         setLocalParticipant(null);
         setRemoteParticipants([]);
@@ -317,7 +318,7 @@ const VideoCall = ({ interviewId }) => {
       });
 
     } catch (error) {
-      console.error('Error connecting to room:', error);
+      console.error('[VideoCall] Error connecting to room:', error);
       setError('Failed to connect to video call. Please try refreshing the page.');
     }
   };

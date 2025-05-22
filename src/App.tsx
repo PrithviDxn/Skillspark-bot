@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { InterviewProvider } from "./context/InterviewContext";
 import VideoCall from "./components/VideoCall.jsx";
@@ -33,13 +33,15 @@ const ProtectedRoute = ({
   requiredRole?: 'admin' | 'user' 
 }) => {
   const { isAuthenticated, user, isLoading } = useAuth();
+  const location = useLocation();
   
   if (isLoading) {
     return <div>Loading...</div>;
   }
   
   if (!isAuthenticated) {
-    return <Navigate to="/login" />;
+    // Redirect to login with redirect param
+    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} />;
   }
   
   if (requiredRole && user?.role !== requiredRole) {

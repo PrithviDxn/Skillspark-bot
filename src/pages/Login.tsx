@@ -1,11 +1,10 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Layout from '@/components/Layout';
 
 const Login: React.FC = () => {
@@ -14,6 +13,7 @@ const Login: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +21,14 @@ const Login: React.FC = () => {
     
     try {
       await login(email, password);
-      navigate('/');
+      // Check for redirect param
+      const params = new URLSearchParams(location.search);
+      const redirect = params.get('redirect');
+      if (redirect) {
+        navigate(redirect);
+      } else {
+        navigate('/');
+      }
     } catch (error) {
       // Error is handled in auth context
     } finally {

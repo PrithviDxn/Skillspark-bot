@@ -59,7 +59,7 @@ const CandidateSelect: React.FC = () => {
       if (res.data && res.data.success) {
         // Refresh interview in state
         await refreshInterview(interviewId);
-        navigate(`/interview/${interviewId}`);
+        navigate(`/video/${interviewId}`);
       } else {
         alert('Could not join interview: ' + (res.data?.message || 'Unknown error'));
       }
