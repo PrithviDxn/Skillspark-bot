@@ -41,7 +41,7 @@ const AdminDashboard: React.FC = () => {
    const getStackNameById = (id: string) => {
     const stack = availableTechStacks.find(s => s.id === id);
     return stack ? stack.name : 'Unknown';
-  };                                                      
+  };
   
   // Add sorting states
   const [pendingSortBy, setPendingSortBy] = useState<'nearest' | 'stack' | 'status'>('nearest');
@@ -493,119 +493,119 @@ const AdminDashboard: React.FC = () => {
             {/* Left column: Schedule Interview */}
             <div>
               <Card ref={scheduleCardRef} style={{ height: '732px' }}>
-                <CardHeader>
+            <CardHeader>
                   <CardTitle>Schedule Interview</CardTitle>
-                  <CardDescription>
+              <CardDescription>
                     Schedule an interview for a candidate
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
                   <InterviewScheduler />
-                </CardContent>
-              </Card>
+            </CardContent>
+          </Card>
             </div>
             {/* Right column: Pending Interviews (top) */}
             <div>
               {/* Pending Interviews: fixed height to match Schedule Interview, now at the top */}
               <Card style={{ height: '732px' }}>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Pending Interviews</CardTitle>
-                    <CardDescription>
-                      Interviews that are scheduled or in progress
-                    </CardDescription>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Select 
-                      value={pendingMonthFilter} 
-                      onValueChange={(value) => {
-                        setPendingMonthFilter(value);
-                        setPendingSortBy('nearest');
-                      }}
-                    >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Filter by Month" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Months</SelectItem>
-                        {getLast12Months().map(month => (
-                          <SelectItem key={month.value} value={month.value}>
-                            {month.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select 
-                      value={pendingSortBy} 
-                      onValueChange={(value) => setPendingSortBy(value as 'nearest' | 'stack' | 'status')}
-                    >
-                      <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="Sort by" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nearest">Nearest Date</SelectItem>
-                        <SelectItem value="stack">Tech Stack</SelectItem>
-                        <SelectItem value="status">Status</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Pending Interviews</CardTitle>
+                  <CardDescription>
+                    Interviews that are scheduled or in progress
+                  </CardDescription>
+                </div>
+                <div className="flex space-x-2">
+                  <Select 
+                    value={pendingMonthFilter} 
+                    onValueChange={(value) => {
+                      setPendingMonthFilter(value);
+                      setPendingSortBy('nearest');
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filter by Month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Months</SelectItem>
+                      {getLast12Months().map(month => (
+                        <SelectItem key={month.value} value={month.value}>
+                          {month.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select 
+                    value={pendingSortBy} 
+                    onValueChange={(value) => setPendingSortBy(value as 'nearest' | 'stack' | 'status')}
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nearest">Nearest Date</SelectItem>
+                      <SelectItem value="stack">Tech Stack</SelectItem>
+                      <SelectItem value="status">Status</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
                 <CardContent style={{ height: '660px', paddingTop: 0 }}>
-                  {sortedPendingInterviews.length > 0 ? (
+                {sortedPendingInterviews.length > 0 ? (
                     <div className="h-full overflow-y-auto space-y-4 pr-2 [&>*:last-child]:mb-0">
-                      {sortedPendingInterviews.map(interview => {
-                        const techStack = availableTechStacks.find(
-                          stack => stack.id === interview.stackId
-                        );
+                    {sortedPendingInterviews.map(interview => {
+                      const techStack = availableTechStacks.find(
+                        stack => stack.id === interview.stackId
+                      );
                         const isLatest = interview.id === latestScheduledInterviewId;
-                        return (
-                          <div 
-                            key={interview.id} 
+                      return (
+                        <div 
+                          key={interview.id} 
                             ref={isLatest ? latestScheduledRef : undefined}
-                            className="p-4 border rounded-md flex justify-between items-center"
-                          >
-                            <div>
-                              <p className="font-medium">
-                                {techStack?.name || 'Unknown'} Interview
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                Scheduled: {interview.scheduledDate
-                                  ? new Date(interview.scheduledDate).toLocaleString()
-                                  : 'N/A'}
-                              </p>
-                              <div className="mt-1">
-                                <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
-                                  {interview.status}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              {interview.status === 'scheduled' && (
-                                <Button variant="default" size="sm" asChild>
-                                  <Link to={`/video/${interview.id}`}>
-                                    Start Interview
-                                  </Link>
-                                </Button>
-                              )}
-                              <Button variant="outline" size="sm" asChild>
-                                <Link to={`/admin/report/${interview.id}`}>
-                                  View
-                                </Link>
-                              </Button>
+                          className="p-4 border rounded-md flex justify-between items-center"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {techStack?.name || 'Unknown'} Interview
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Scheduled: {interview.scheduledDate
+                                ? new Date(interview.scheduledDate).toLocaleString()
+                                : 'N/A'}
+                            </p>
+                            <div className="mt-1">
+                              <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+                                {interview.status}
+                              </span>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <Clipboard className="mx-auto h-12 w-12 text-gray-400" />
-                      <h3 className="mt-2 text-sm font-semibold">No pending interviews</h3>
-                      <p className="mt-1 text-sm">Start a new interview with a candidate</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                          <div className="flex gap-2">
+                            {interview.status === 'scheduled' && (
+                              <Button variant="default" size="sm" asChild>
+                                <Link to={`/video/${interview.id}`}>
+                                  Start Interview
+                                </Link>
+                              </Button>
+                            )}
+                            <Button variant="outline" size="sm" asChild>
+                              <Link to={`/admin/report/${interview.id}`}>
+                                View
+                              </Link>
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Clipboard className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-semibold">No pending interviews</h3>
+                    <p className="mt-1 text-sm">Start a new interview with a candidate</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
             </div>
           </div>
         </div>
