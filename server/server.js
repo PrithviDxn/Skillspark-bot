@@ -30,7 +30,9 @@ app.use(cors({
     // Allow your main Vercel domain and all preview deployments
     if (
       origin.endsWith('.vercel.app') ||
-      origin === 'https://skill-spark-interview-ai-prithvis-projects-95584e4f.vercel.app'
+      origin.endsWith('.netlify.app') ||
+      origin === 'https://skill-spark-interview-ai-prithvis-projects-95584e4f.vercel.app' ||
+      origin === 'https://skillsparkai.netlify.app/'
     ) {
       return callback(null, true);
     }
