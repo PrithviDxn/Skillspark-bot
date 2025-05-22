@@ -55,19 +55,20 @@ if (!fs.existsSync(tempDir)) {
   }
 }
 
-// Route files
-import authRoutes from './routes/auth.js';
-import userRoutes from './routes/users.js';
-import techStackRoutes from './routes/techStacks.js';
-import questionRoutes from './routes/questions.js';
-import interviewRoutes from './routes/interviews.js';
-import answerRoutes from './routes/answers.js';
-import uploadRoutes from './routes/uploads.js';
-import aiRoutes from './routes/ai.js';
-import roleRoutes from './routes/roles.js';
-import emailRoutes from './routes/email.js';
-
-const app = express();
+// CORS middleware for Vercel frontend
+const allowedOrigins = ['https://skill-spark-interview-ai-prithvis-projects-95584e4f.vercel.app'];
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
 
 // Parse JSON bodies
 app.use(express.json());
@@ -86,9 +87,6 @@ app.use(fileUpload({
   uploadTimeout: 60000, // 60 seconds timeout
   uriDecodeFileNames: true // Decode URI encoded filenames
 }));
-
-// Enable CORS
-app.use(cors());
 
 // Set static folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
