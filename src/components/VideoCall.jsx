@@ -16,7 +16,7 @@ const VideoCall = ({ interviewId }) => {
   const reconnectAttemptsRef = useRef(0);
   const MAX_RECONNECT_ATTEMPTS = 3;
   const bufferedTracksRef = useRef([]);
-  const [videoContainers, setVideoContainers] = useState([]);
+  const [videoContainers, setVideoContainers] = useState([]); 
 
   // Attach buffered tracks when the container is ready
   useEffect(() => {

@@ -23,23 +23,39 @@ import emailRoutes from './routes/email.js';
 
 const app = express();
 
-// CORS middleware for Vercel frontend
+// Updated CORS middleware
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow localhost for local dev
-    if (!origin || origin.startsWith('http://localhost')) return callback(null, true);
-    // Allow your main Vercel domain and all preview deployments
-    if (
-      origin.endsWith('.vercel.app') ||
-      origin.endsWith('.netlify.app') ||
-      origin === 'https://skill-spark-interview-ai-prithvis-projects-95584e4f.vercel.app' ||
-      origin === 'https://skillsparkai.netlify.app/'
-    ) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow local development (localhost)
+    if (origin.startsWith('http://localhost')) {
       return callback(null, true);
     }
+    
+    // List of allowed domains (Netlify, Render, Vercel)
+    const allowedDomains = [
+      /\.netlify\.app$/,  // All Netlify previews
+      /\.vercel\.app$/,   // All Vercel previews
+      'https://skillsparkai.netlify.app',  // Your live Netlify frontend
+      'https://skill-spark-interview-ai.onrender.com',  // Your Render backend (if frontend makes requests to itself)
+    ];
+    
+    // Check if the origin matches any allowed domain
+    if (allowedDomains.some(domain => {
+      if (typeof domain === 'string') return origin === domain;
+      return domain.test(origin); // For regex patterns
+    })) {
+      return callback(null, true);
+    }
+    
+    // Block if not allowed
     return callback(new Error('Not allowed by CORS'), false);
   },
-  credentials: true
+  credentials: true,  // Allow cookies/auth headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // Allowed HTTP methods
+  allowedHeaders: ['Content-Type', 'Authorization'],  // Allowed headers
 }));
 
 
