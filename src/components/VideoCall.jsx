@@ -93,13 +93,16 @@ const VideoCall = ({ interviewId }) => {
     const fetchToken = async () => {
       try {
         console.log('[VideoCall] Fetching video token for interview:', interviewId, 'User:', user?.email, 'UserID:', user?._id);
-        const response = await fetch(`/api/v1/video/room/${interviewId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/video/room/${interviewId}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
           }
-        });
+        );
         const data = await response.json();
         console.log('[VideoCall] Token response:', data);
         
