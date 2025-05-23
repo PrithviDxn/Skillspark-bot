@@ -146,6 +146,14 @@ app.get('/', (req, res) => {
   res.send('SkillSpark API is running...');
 });
 
+// Catch-all route for 404s
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `Route not found: ${req.method} ${req.originalUrl}`
+  });
+});
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
