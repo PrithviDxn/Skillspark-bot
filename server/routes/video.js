@@ -8,6 +8,7 @@ const router = express.Router();
 // @route   POST /api/v1/video/room/:interviewId
 // @access  Private
 router.post('/room/:interviewId', protect, async (req, res, next) => {
+  console.log('Video room endpoint hit!');
   try {
     const interviewId = req.params.interviewId;
     const identity = req.user.id;

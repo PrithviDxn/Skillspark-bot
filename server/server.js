@@ -6,8 +6,9 @@ import cors from 'cors';
 import fileUpload from 'express-fileupload';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
-import videoRoutes from './routes/video.js';
 
+
+import videoRoutes from './routes/video.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import techStackRoutes from './routes/techStacks.js';

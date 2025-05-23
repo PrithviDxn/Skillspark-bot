@@ -715,23 +715,13 @@ const AdminDashboard: React.FC = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <QuestionManager showUploadSection={false} />
+                <QuestionManager showUploadSection={true} />
               </CardContent>
             </Card>
           </div>
-          
-          {/* Individual Question Management - Full Width */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Single Question</CardTitle>
-              <CardDescription>
-                Add a single question to the selected tech stack
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <QuestionManager showUploadSection={false} />
-            </CardContent>
-          </Card>
+          <div className="mt-6">
+            <QuestionManager showUploadSection={false} />
+          </div>
           <TechStackGrid />
         </div>
       ) : activeTab === 'browse' ? (
