@@ -18,16 +18,16 @@ const VideoCall = ({ interviewId }) => {
   const bufferedTracksRef = useRef([]);
   const [videoContainers, setVideoContainers] = useState([]); 
 
-  // Attach buffered tracks when the container is ready
+  // Attach buffered tracks when the containers are ready
   useEffect(() => {
-    if (videoContainerRef.current && bufferedTracksRef.current.length > 0) {
+    if (bufferedTracksRef.current.length > 0) {
       console.log('Processing buffered tracks:', bufferedTracksRef.current.length);
       bufferedTracksRef.current.forEach(({ track, isLocal }) => {
         realAddTrackToDOM(track, isLocal);
       });
       bufferedTracksRef.current = [];
     }
-  }, [videoContainerRef.current]);
+  }, [videoContainers]);
 
   // Update video containers when tracks change
   useEffect(() => {
