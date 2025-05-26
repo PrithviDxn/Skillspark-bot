@@ -7,19 +7,27 @@ function TrackRenderer({ track, kind, isLocal }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
-    if (containerRef.current && track) {
-      // Detach any previous attachments
-      track.detach().forEach(el => el.remove());
-      // Attach the track to the container
-      const mediaElement = track.attach();
-      mediaElement.id = `video-${track.sid}`;
-      mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
-      mediaElement.autoplay = true;
-      mediaElement.playsInline = true;
-      containerRef.current.appendChild(mediaElement);
+    let retryTimeout;
+    function tryAttach() {
+      if (containerRef.current && track) {
+        // Detach any previous attachments
+        track.detach().forEach(el => el.remove());
+        // Attach the track to the container
+        const mediaElement = track.attach();
+        mediaElement.id = `video-${track.sid}`;
+        mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
+        mediaElement.autoplay = true;
+        mediaElement.playsInline = true;
+        containerRef.current.appendChild(mediaElement);
+      } else {
+        // Retry after 200ms if not ready
+        retryTimeout = setTimeout(tryAttach, 200);
+      }
     }
+    tryAttach();
     // Cleanup on unmount
     return () => {
+      if (retryTimeout) clearTimeout(retryTimeout);
       if (track) {
         track.detach().forEach(el => el.remove());
       }
@@ -557,9 +565,11 @@ const VideoCall = ({ interviewId }) => {
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
       <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
-        {videoContainers.map(({ track, isLocal, kind }) => (
-          <TrackRenderer key={track.sid} track={track} kind={kind} isLocal={isLocal} />
-        ))}
+        {videoContainers
+          .filter(({ kind }) => kind === 'video')
+          .map(({ track, isLocal, kind }) => (
+            <TrackRenderer key={track.sid} track={track} kind={kind} isLocal={isLocal} />
+          ))}
       </div>
       <div className="bg-gray-800 p-2 flex justify-center space-x-4">
         <button
