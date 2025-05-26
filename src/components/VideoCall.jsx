@@ -64,10 +64,10 @@ const VideoCall = ({ interviewId }) => {
   // Update video containers when tracks change
   useEffect(() => {
     const tracks = getAllVideoTracks();
-    setVideoContainers(tracks.map(({ track }) => ({
-      id: track.sid,
-      isLocal: track.isLocal,
-      kind: track.kind
+    setVideoContainers(tracks.map(({ track, isLocal, kind }) => ({
+      track,      // Store the actual track object
+      isLocal,
+      kind
     })));
   }, [localParticipant, remoteParticipants]);
 
