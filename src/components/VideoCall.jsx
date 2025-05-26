@@ -48,7 +48,8 @@ const VideoCall = ({ interviewId }) => {
   const reconnectAttemptsRef = useRef(0);
   const MAX_RECONNECT_ATTEMPTS = 3;
   const bufferedTracksRef = useRef([]);
-  const [videoContainers, setVideoContainers] = useState([]); 
+  const [videoContainers, setVideoContainers] = useState([]);
+  const [trackUpdateCount, setTrackUpdateCount] = useState(0);
 
   // Attach buffered tracks when the container is ready
   useEffect(() => {
@@ -65,11 +66,11 @@ const VideoCall = ({ interviewId }) => {
   useEffect(() => {
     const tracks = getAllVideoTracks();
     setVideoContainers(tracks.map(({ track, isLocal, kind }) => ({
-      track,      // Store the actual track object
+      track,
       isLocal,
       kind
     })));
-  }, [localParticipant, remoteParticipants]);
+  }, [localParticipant, remoteParticipants, trackUpdateCount]);
 
   // Add a new effect to handle track attachment retries
   useEffect(() => {
@@ -336,6 +337,7 @@ const VideoCall = ({ interviewId }) => {
         console.log('[VideoCall] Track subscribed:', track.kind, 'from participant:', participant.identity);
         tracksRef.current.add(track);
         addTrackToDOM(track, participant === newRoom.localParticipant);
+        setTrackUpdateCount(count => count + 1);
       });
 
       newRoom.on('trackUnsubscribed', (track, publication, participant) => {
