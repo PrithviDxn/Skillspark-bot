@@ -16,32 +16,42 @@ function TrackRenderer({ track, kind, isLocal }) {
     const tryAttach = () => {
       if (!mounted) return;
 
-      if (!track) {
-        console.log('[TrackRenderer] No track provided');
+      if (!track || !track.sid) {
+        console.log('[TrackRenderer] Invalid track:', track);
         return;
       }
 
       if (kind === 'video' && containerRef.current) {
         console.log('[TrackRenderer] Attempting to attach video track:', track.sid, isLocal ? 'local' : 'remote');
         
-        // Clean up any existing elements
-        track.detach().forEach(el => el.remove());
-        
-        // Create and attach new element
-        const mediaElement = track.attach();
-        mediaElement.id = `video-${track.sid}`;
-        mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
-        mediaElement.autoplay = true;
-        mediaElement.playsInline = true;
-        
-        // Clear container and append new element
-        while (containerRef.current.firstChild) {
-          containerRef.current.removeChild(containerRef.current.firstChild);
+        try {
+          // Clean up any existing elements
+          track.detach().forEach(el => el.remove());
+          
+          // Create and attach new element
+          const mediaElement = track.attach();
+          mediaElement.id = `video-${track.sid}`;
+          mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
+          mediaElement.autoplay = true;
+          mediaElement.playsInline = true;
+          
+          // Clear container and append new element
+          while (containerRef.current.firstChild) {
+            containerRef.current.removeChild(containerRef.current.firstChild);
+          }
+          containerRef.current.appendChild(mediaElement);
+          
+          setIsAttached(true);
+          console.log('[TrackRenderer] Successfully attached video track:', track.sid);
+        } catch (error) {
+          console.error('[TrackRenderer] Error attaching track:', error);
+          if (retryCount < MAX_RETRIES) {
+            retryTimeout = setTimeout(() => {
+              setRetryCount(prev => prev + 1);
+              tryAttach();
+            }, 200);
+          }
         }
-        containerRef.current.appendChild(mediaElement);
-        
-        setIsAttached(true);
-        console.log('[TrackRenderer] Successfully attached video track:', track.sid);
       } else if (kind === 'audio') {
         // Audio tracks are handled automatically by Twilio
         setIsAttached(true);
@@ -516,7 +526,7 @@ const VideoCall = ({ interviewId }) => {
     // Local participant tracks
     if (localParticipant) {
       localParticipant.tracks.forEach(publication => {
-        if (publication.track) {
+        if (publication.track && publication.track.sid) {
           const track = publication.track;
           if (track.kind === 'video' || track.kind === 'audio') {
             tracks.push({
@@ -532,7 +542,7 @@ const VideoCall = ({ interviewId }) => {
     // Remote participant tracks
     remoteParticipants.forEach(participant => {
       participant.tracks.forEach(publication => {
-        if (publication.track) {
+        if (publication.track && publication.track.sid) {
           const track = publication.track;
           if (track.kind === 'video' || track.kind === 'audio') {
             tracks.push({
@@ -629,14 +639,20 @@ const VideoCall = ({ interviewId }) => {
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
       <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
-        {videoContainers.map(({ track, isLocal, kind }) => (
-          <TrackRenderer 
-            key={`${track.sid}-${kind}`} 
-            track={track} 
-            kind={kind} 
-            isLocal={isLocal} 
-          />
-        ))}
+        {videoContainers.map(({ track, isLocal, kind }) => {
+          if (!track || !track.sid) {
+            console.log('[VideoCall] Skipping invalid track:', track);
+            return null;
+          }
+          return (
+            <TrackRenderer 
+              key={`${track.sid}-${kind}`} 
+              track={track} 
+              kind={kind} 
+              isLocal={isLocal} 
+            />
+          );
+        })}
       </div>
       <div className="bg-gray-800 p-2 flex justify-center space-x-4">
         <button
