@@ -5,59 +5,77 @@ import { useAuth } from '../context/AuthContext';
 // TrackRenderer component for robust track attachment
 function TrackRenderer({ track, kind, isLocal }) {
   const containerRef = useRef(null);
-  const audioRef = useRef(null);
+  const [isAttached, setIsAttached] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 10;
 
   useEffect(() => {
     let retryTimeout;
-    function tryAttach() {
-      if (kind === 'video') {
-        if (containerRef.current && track) {
-          console.log('[TrackRenderer] Attaching video track:', track.sid, isLocal ? 'local' : 'remote');
-          track.detach().forEach(el => el.remove());
-          const mediaElement = track.attach();
-          mediaElement.id = `video-${track.sid}`;
-          mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
-          mediaElement.autoplay = true;
-          mediaElement.playsInline = true;
-          containerRef.current.appendChild(mediaElement);
-        } else {
-          retryTimeout = setTimeout(tryAttach, 200);
-        }
-      } else if (kind === 'audio') {
-        if (audioRef.current && track) {
-          console.log('[TrackRenderer] Attaching audio track:', track.sid, isLocal ? 'local' : 'remote');
-          track.detach().forEach(el => el.remove());
-          const mediaElement = track.attach();
-          mediaElement.autoplay = true;
-          audioRef.current.appendChild(mediaElement);
-        } else {
-          retryTimeout = setTimeout(tryAttach, 200);
-        }
+    let mounted = true;
+
+    const tryAttach = () => {
+      if (!mounted) return;
+
+      if (!track) {
+        console.log('[TrackRenderer] No track provided');
+        return;
       }
-    }
+
+      if (kind === 'video' && containerRef.current) {
+        console.log('[TrackRenderer] Attempting to attach video track:', track.sid, isLocal ? 'local' : 'remote');
+        
+        // Clean up any existing elements
+        track.detach().forEach(el => el.remove());
+        
+        // Create and attach new element
+        const mediaElement = track.attach();
+        mediaElement.id = `video-${track.sid}`;
+        mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
+        mediaElement.autoplay = true;
+        mediaElement.playsInline = true;
+        
+        // Clear container and append new element
+        while (containerRef.current.firstChild) {
+          containerRef.current.removeChild(containerRef.current.firstChild);
+        }
+        containerRef.current.appendChild(mediaElement);
+        
+        setIsAttached(true);
+        console.log('[TrackRenderer] Successfully attached video track:', track.sid);
+      } else if (kind === 'audio') {
+        // Audio tracks are handled automatically by Twilio
+        setIsAttached(true);
+      } else if (retryCount < MAX_RETRIES) {
+        console.log('[TrackRenderer] Container not ready, retrying...', retryCount + 1);
+        retryTimeout = setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          tryAttach();
+        }, 200);
+      }
+    };
+
     tryAttach();
+
     return () => {
+      mounted = false;
       if (retryTimeout) clearTimeout(retryTimeout);
       if (track) {
         track.detach().forEach(el => el.remove());
       }
     };
-  }, [track, isLocal, kind]);
+  }, [track, kind, isLocal, retryCount]);
 
   if (kind === 'video') {
-    console.log('[TrackRenderer] Rendering video track:', track.sid, isLocal ? 'local' : 'remote');
     return (
       <div
         ref={containerRef}
-        className="video-container relative flex-1 min-w-[300px] max-w-[calc(50%-8px)] aspect-video"
+        className="video-container relative flex-1 min-w-[300px] max-w-[calc(50%-8px)] aspect-video bg-gray-900 rounded-lg overflow-hidden"
       />
     );
   } else if (kind === 'audio') {
-    console.log('[TrackRenderer] Rendering audio track:', track.sid, isLocal ? 'local' : 'remote');
-    return <div ref={audioRef} style={{ display: 'none' }} />;
-  } else {
-    return null;
+    return <div style={{ display: 'none' }} />;
   }
+  return null;
 }
 
 const VideoCall = ({ interviewId }) => {
@@ -494,27 +512,45 @@ const VideoCall = ({ interviewId }) => {
   // Helper to get all video tracks (local + remote)
   const getAllVideoTracks = () => {
     const tracks = [];
-    // Local participant
+    
+    // Local participant tracks
     if (localParticipant) {
       localParticipant.tracks.forEach(publication => {
-        if (publication.track && (publication.track.kind === 'video' || publication.track.kind === 'audio')) {
-          tracks.push({ track: publication.track, isLocal: true, kind: publication.track.kind });
+        if (publication.track) {
+          const track = publication.track;
+          if (track.kind === 'video' || track.kind === 'audio') {
+            tracks.push({
+              track,
+              isLocal: true,
+              kind: track.kind
+            });
+          }
         }
       });
     }
-    // Remote participants
+
+    // Remote participant tracks
     remoteParticipants.forEach(participant => {
       participant.tracks.forEach(publication => {
-        if (publication.track && (publication.track.kind === 'video' || publication.track.kind === 'audio')) {
-          tracks.push({ track: publication.track, isLocal: false, kind: publication.track.kind });
+        if (publication.track) {
+          const track = publication.track;
+          if (track.kind === 'video' || track.kind === 'audio') {
+            tracks.push({
+              track,
+              isLocal: false,
+              kind: track.kind
+            });
+          }
         }
       });
     });
+
     console.log('[VideoCall][getAllVideoTracks] Returning tracks:', tracks.map(t => ({
       sid: t.track.sid,
       kind: t.kind,
       isLocal: t.isLocal
     })));
+    
     return tracks;
   };
 
@@ -594,7 +630,12 @@ const VideoCall = ({ interviewId }) => {
     <div className="fixed inset-0 flex flex-col bg-gray-900">
       <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
         {videoContainers.map(({ track, isLocal, kind }) => (
-          <TrackRenderer key={track.sid} track={track} kind={kind} isLocal={isLocal} />
+          <TrackRenderer 
+            key={`${track.sid}-${kind}`} 
+            track={track} 
+            kind={kind} 
+            isLocal={isLocal} 
+          />
         ))}
       </div>
       <div className="bg-gray-800 p-2 flex justify-center space-x-4">
