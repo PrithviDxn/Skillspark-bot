@@ -2,6 +2,38 @@ import { useEffect, useState, useRef } from 'react';
 import { Video, connect } from 'twilio-video';
 import { useAuth } from '../context/AuthContext';
 
+// TrackRenderer component for robust track attachment
+function TrackRenderer({ track, kind, isLocal }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (containerRef.current && track) {
+      // Detach any previous attachments
+      track.detach().forEach(el => el.remove());
+      // Attach the track to the container
+      const mediaElement = track.attach();
+      mediaElement.id = `video-${track.sid}`;
+      mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
+      mediaElement.autoplay = true;
+      mediaElement.playsInline = true;
+      containerRef.current.appendChild(mediaElement);
+    }
+    // Cleanup on unmount
+    return () => {
+      if (track) {
+        track.detach().forEach(el => el.remove());
+      }
+    };
+  }, [track, isLocal]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="video-container relative flex-1 min-w-[300px] max-w-[calc(50%-8px)] aspect-video"
+    />
+  );
+}
+
 const VideoCall = ({ interviewId }) => {
   const [room, setRoom] = useState(null);
   const [localParticipant, setLocalParticipant] = useState(null);
@@ -522,23 +554,9 @@ const VideoCall = ({ interviewId }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
-      <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden" ref={videoContainerRef}>
-        {videoContainers.map(({ id, isLocal, kind }) => (
-          <div 
-            key={id} 
-            className="video-container relative flex-1 min-w-[300px] max-w-[calc(50%-8px)] aspect-video" 
-            id={`video-container-${id}`}
-          >
-            {kind === 'video' && (
-              <div 
-                id={`video-${id}`} 
-                className={`video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`}
-              ></div>
-            )}
-            {kind === 'audio' && (
-              <audio id={`video-${id}`} autoPlay hidden />
-            )}
-          </div>
+      <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
+        {videoContainers.map(({ track, isLocal, kind }) => (
+          <TrackRenderer key={track.sid} track={track} kind={kind} isLocal={isLocal} />
         ))}
       </div>
       <div className="bg-gray-800 p-2 flex justify-center space-x-4">
