@@ -217,6 +217,24 @@ const VideoCall = ({ interviewId }) => {
       console.log('[VideoCall] Successfully connected to room:', newRoom.sid, 'Room name:', newRoom.name, 'Local identity:', newRoom.localParticipant.identity);
       setRoom(newRoom);
       setLocalParticipant(newRoom.localParticipant);
+
+      // --- Listen for local track events and update state ---
+      newRoom.localParticipant.tracks.forEach(publication => {
+        if (publication.track) {
+          setTrackUpdateCount(count => count + 1);
+        }
+        publication.on('subscribed', track => {
+          setTrackUpdateCount(count => count + 1);
+        });
+        publication.on('trackPublished', () => {
+          setTrackUpdateCount(count => count + 1);
+        });
+      });
+      newRoom.localParticipant.on('trackPublished', () => {
+        setTrackUpdateCount(count => count + 1);
+      });
+      // --- End local track event listeners ---
+
       newRoom.on('participantConnected', participant => {
         console.log('[VideoCall] New participant connected:', participant.identity);
         setRemoteParticipants(prev => [...prev, participant]);
@@ -238,11 +256,7 @@ const VideoCall = ({ interviewId }) => {
       newRoom.on('trackUnsubscribed', (track, publication, participant) => {
         setTrackUpdateCount(count => count + 1);
       });
-      newRoom.localParticipant.tracks.forEach(publication => {
-        publication.on('subscribed', track => {
-          setTrackUpdateCount(count => count + 1);
-        });
-      });
+      // Already handled above for local participant
       newRoom.participants.forEach(participant => {
         participant.tracks.forEach(publication => {
           publication.on('subscribed', track => {
@@ -342,13 +356,22 @@ const VideoCall = ({ interviewId }) => {
   }
 
   if (isWaitingForCandidate) {
+    // Find the local video track
+    const localVideo = videoContainers.find(vc => vc.isLocal && vc.kind === 'video');
     return (
       <div className="fixed inset-0 flex flex-col bg-gray-900">
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="text-white text-2xl mb-4">Waiting for candidate to join...</div>
           <div className="text-gray-400 mb-8">Your video and audio are ready</div>
           <div className="video-container relative w-[400px] aspect-video">
-            {/* Optionally render local video preview here if desired */}
+            {localVideo && (
+              <TrackRenderer
+                key={`${localVideo.track.sid}-waiting`}
+                track={localVideo.track}
+                kind={localVideo.kind}
+                isLocal={localVideo.isLocal}
+              />
+            )}
           </div>
           <div className="mt-8 bg-gray-800 p-2 flex justify-center space-x-4">
             <button
