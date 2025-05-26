@@ -12,6 +12,7 @@ function TrackRenderer({ track, kind, isLocal }) {
     function tryAttach() {
       if (kind === 'video') {
         if (containerRef.current && track) {
+          console.log('[TrackRenderer] Attaching video track:', track.sid, isLocal ? 'local' : 'remote');
           track.detach().forEach(el => el.remove());
           const mediaElement = track.attach();
           mediaElement.id = `video-${track.sid}`;
@@ -24,6 +25,7 @@ function TrackRenderer({ track, kind, isLocal }) {
         }
       } else if (kind === 'audio') {
         if (audioRef.current && track) {
+          console.log('[TrackRenderer] Attaching audio track:', track.sid, isLocal ? 'local' : 'remote');
           track.detach().forEach(el => el.remove());
           const mediaElement = track.attach();
           mediaElement.autoplay = true;
@@ -43,6 +45,7 @@ function TrackRenderer({ track, kind, isLocal }) {
   }, [track, isLocal, kind]);
 
   if (kind === 'video') {
+    console.log('[TrackRenderer] Rendering video track:', track.sid, isLocal ? 'local' : 'remote');
     return (
       <div
         ref={containerRef}
@@ -50,6 +53,7 @@ function TrackRenderer({ track, kind, isLocal }) {
       />
     );
   } else if (kind === 'audio') {
+    console.log('[TrackRenderer] Rendering audio track:', track.sid, isLocal ? 'local' : 'remote');
     return <div ref={audioRef} style={{ display: 'none' }} />;
   } else {
     return null;
@@ -203,7 +207,7 @@ const VideoCall = ({ interviewId }) => {
       clearTimeout(reconnectTimeout);
 
       // Clean up all tracks
-      tracksRef.current.forEach(track => {                              
+      tracksRef.current.forEach(track => {                                          
         if (track.stop) {
           track.stop();
         }
@@ -583,6 +587,8 @@ const VideoCall = ({ interviewId }) => {
       </div>
     );
   }
+
+  console.log('[VideoCall][render] videoContainers:', videoContainers);
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">

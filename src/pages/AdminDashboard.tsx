@@ -19,6 +19,7 @@ import { userAPI, questionAPI, interviewAPI } from '@/api';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Question } from '@/context/InterviewContext';
 import TechStackGrid from '@/components/TechStackGrid';
+import RoleManager from '@/components/RoleManager';
 
 // Add this interface for user data
 interface AdminUser {
@@ -471,9 +472,16 @@ const AdminDashboard: React.FC = () => {
           >
             Tech Stack Questions
           </button>
-          <Link to="/admin/tech-stack-roles" className="px-4 py-2 font-medium text-interview-primary hover:text-interview-primary/80">
+          <button
+            className={`px-4 py-2 font-medium ${
+              activeTab === 'roleManager'
+                ? 'text-interview-primary border-b-2 border-interview-primary'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            onClick={() => setActiveTab('roleManager')}
+          >
             Role Manager
-          </Link>
+          </button>
           <button
             className={`px-4 py-2 font-medium ${
               activeTab === 'users'
@@ -816,6 +824,8 @@ const AdminDashboard: React.FC = () => {
             </Card>
           )}
         </div>
+      ) : activeTab === 'roleManager' ? (
+        <RoleManager />
       ) : (
         renderUserManagementTab()
       )}
