@@ -18,23 +18,24 @@ const VideoCall = ({ interviewId }) => {
   const bufferedTracksRef = useRef([]);
   const [videoContainers, setVideoContainers] = useState([]); 
 
-  // Attach buffered tracks when the containers are ready
+  // Attach buffered tracks when the container is ready
   useEffect(() => {
-    if (bufferedTracksRef.current.length > 0) {
+    if (videoContainerRef.current && bufferedTracksRef.current.length > 0) {
       console.log('Processing buffered tracks:', bufferedTracksRef.current.length);
       bufferedTracksRef.current.forEach(({ track, isLocal }) => {
         realAddTrackToDOM(track, isLocal);
       });
       bufferedTracksRef.current = [];
     }
-  }, [videoContainers]);
+  }, [videoContainerRef.current]);
 
   // Update video containers when tracks change
   useEffect(() => {
     const tracks = getAllVideoTracks();
     setVideoContainers(tracks.map(({ track }) => ({
       id: track.sid,
-      isLocal: track.isLocal
+      isLocal: track.isLocal,
+      kind: track.kind
     })));
   }, [localParticipant, remoteParticipants]);
 
@@ -433,16 +434,16 @@ const VideoCall = ({ interviewId }) => {
     // Local participant
     if (localParticipant) {
       localParticipant.tracks.forEach(publication => {
-        if (publication.track && publication.track.kind === 'video') {
-          tracks.push({ track: publication.track, isLocal: true });
+        if (publication.track && (publication.track.kind === 'video' || publication.track.kind === 'audio')) {
+          tracks.push({ track: publication.track, isLocal: true, kind: publication.track.kind });
         }
       });
     }
     // Remote participants
     remoteParticipants.forEach(participant => {
       participant.tracks.forEach(publication => {
-        if (publication.track && publication.track.kind === 'video') {
-          tracks.push({ track: publication.track, isLocal: false });
+        if (publication.track && (publication.track.kind === 'video' || publication.track.kind === 'audio')) {
+          tracks.push({ track: publication.track, isLocal: false, kind: publication.track.kind });
         }
       });
     });
@@ -486,7 +487,7 @@ const VideoCall = ({ interviewId }) => {
           <div className="text-white text-2xl mb-4">Waiting for candidate to join...</div>
           <div className="text-gray-400 mb-8">Your video and audio are ready</div>
           <div className="video-container relative w-[400px] aspect-video">
-            <div className="video-participant local w-full h-full object-cover rounded-lg"></div>
+            <div id={`video-${videoContainers.find(vc => vc.isLocal && vc.kind === 'video')?.id || 'local-waiting'}`} className="video-participant local w-full h-full object-cover rounded-lg"></div>
           </div>
           <div className="mt-8 bg-gray-800 p-2 flex justify-center space-x-4">
             <button
@@ -522,16 +523,21 @@ const VideoCall = ({ interviewId }) => {
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
       <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden" ref={videoContainerRef}>
-        {videoContainers.map(({ id, isLocal }) => (
+        {videoContainers.map(({ id, isLocal, kind }) => (
           <div 
             key={id} 
             className="video-container relative flex-1 min-w-[300px] max-w-[calc(50%-8px)] aspect-video" 
             id={`video-container-${id}`}
           >
-            <div 
-              id={`video-${id}`} 
-              className={`video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`}
-            ></div>
+            {kind === 'video' && (
+              <div 
+                id={`video-${id}`} 
+                className={`video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`}
+              ></div>
+            )}
+            {kind === 'audio' && (
+              <audio id={`video-${id}`} autoPlay hidden />
+            )}
           </div>
         ))}
       </div>
