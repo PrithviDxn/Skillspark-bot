@@ -5,41 +5,55 @@ import { useAuth } from '../context/AuthContext';
 // TrackRenderer component for robust track attachment
 function TrackRenderer({ track, kind, isLocal }) {
   const containerRef = useRef(null);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     let retryTimeout;
     function tryAttach() {
-      if (containerRef.current && track) {
-        // Detach any previous attachments
-        track.detach().forEach(el => el.remove());
-        // Attach the track to the container
-        const mediaElement = track.attach();
-        mediaElement.id = `video-${track.sid}`;
-        mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
-        mediaElement.autoplay = true;
-        mediaElement.playsInline = true;
-        containerRef.current.appendChild(mediaElement);
-      } else {
-        // Retry after 200ms if not ready
-        retryTimeout = setTimeout(tryAttach, 200);
+      if (kind === 'video') {
+        if (containerRef.current && track) {
+          track.detach().forEach(el => el.remove());
+          const mediaElement = track.attach();
+          mediaElement.id = `video-${track.sid}`;
+          mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
+          mediaElement.autoplay = true;
+          mediaElement.playsInline = true;
+          containerRef.current.appendChild(mediaElement);
+        } else {
+          retryTimeout = setTimeout(tryAttach, 200);
+        }
+      } else if (kind === 'audio') {
+        if (audioRef.current && track) {
+          track.detach().forEach(el => el.remove());
+          const mediaElement = track.attach();
+          mediaElement.autoplay = true;
+          audioRef.current.appendChild(mediaElement);
+        } else {
+          retryTimeout = setTimeout(tryAttach, 200);
+        }
       }
     }
     tryAttach();
-    // Cleanup on unmount
     return () => {
       if (retryTimeout) clearTimeout(retryTimeout);
       if (track) {
         track.detach().forEach(el => el.remove());
       }
     };
-  }, [track, isLocal]);
+  }, [track, isLocal, kind]);
 
-  return (
-    <div
-      ref={containerRef}
-      className="video-container relative flex-1 min-w-[300px] max-w-[calc(50%-8px)] aspect-video"
-    />
-  );
+  if (kind === 'video') {
+    return (
+      <div
+        ref={containerRef}
+        className="video-container relative flex-1 min-w-[300px] max-w-[calc(50%-8px)] aspect-video"
+      />
+    );
+  } else if (kind === 'audio') {
+    return <div ref={audioRef} style={{ display: 'none' }} />;
+  } else {
+    return null;
+  }
 }
 
 const VideoCall = ({ interviewId }) => {
@@ -189,7 +203,7 @@ const VideoCall = ({ interviewId }) => {
       clearTimeout(reconnectTimeout);
 
       // Clean up all tracks
-      tracksRef.current.forEach(track => {
+      tracksRef.current.forEach(track => {                              
         if (track.stop) {
           track.stop();
         }
@@ -319,6 +333,7 @@ const VideoCall = ({ interviewId }) => {
       newRoom.on('participantConnected', participant => {
         console.log('[VideoCall] New participant connected:', participant.identity);
         setRemoteParticipants(prev => [...prev, participant]);
+        setTrackUpdateCount(count => count + 1);
         participant.tracks.forEach(publication => {
           if (publication.track) {
             console.log('[VideoCall] Attaching new participant track:', publication.track.kind);
@@ -329,6 +344,7 @@ const VideoCall = ({ interviewId }) => {
             console.log('[VideoCall] New participant track subscribed:', track.kind);
             tracksRef.current.add(track);
             addTrackToDOM(track, false);
+            setTrackUpdateCount(count => count + 1);
           });
         });
       });
@@ -352,6 +368,7 @@ const VideoCall = ({ interviewId }) => {
         console.log('[VideoCall] Track unsubscribed:', track.kind, 'from participant:', participant.identity);
         tracksRef.current.delete(track);
         removeTrackFromDOM(track);
+        setTrackUpdateCount(count => count + 1);
       });
 
       // Handle room disconnection
@@ -489,6 +506,11 @@ const VideoCall = ({ interviewId }) => {
         }
       });
     });
+    console.log('[VideoCall][getAllVideoTracks] Returning tracks:', tracks.map(t => ({
+      sid: t.track.sid,
+      kind: t.kind,
+      isLocal: t.isLocal
+    })));
     return tracks;
   };
 
@@ -565,11 +587,9 @@ const VideoCall = ({ interviewId }) => {
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
       <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
-        {videoContainers
-          .filter(({ kind }) => kind === 'video')
-          .map(({ track, isLocal, kind }) => (
-            <TrackRenderer key={track.sid} track={track} kind={kind} isLocal={isLocal} />
-          ))}
+        {videoContainers.map(({ track, isLocal, kind }) => (
+          <TrackRenderer key={track.sid} track={track} kind={kind} isLocal={isLocal} />
+        ))}
       </div>
       <div className="bg-gray-800 p-2 flex justify-center space-x-4">
         <button
