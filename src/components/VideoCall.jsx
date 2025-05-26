@@ -23,24 +23,17 @@ function TrackRenderer({ track, kind, isLocal }) {
 
       if (kind === 'video' && containerRef.current) {
         console.log('[TrackRenderer] Attempting to attach video track:', track.sid, isLocal ? 'local' : 'remote');
-        
         try {
-          // Clean up any existing elements
           track.detach().forEach(el => el.remove());
-          
-          // Create and attach new element
           const mediaElement = track.attach();
           mediaElement.id = `video-${track.sid}`;
           mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
           mediaElement.autoplay = true;
           mediaElement.playsInline = true;
-          
-          // Clear container and append new element
           while (containerRef.current.firstChild) {
             containerRef.current.removeChild(containerRef.current.firstChild);
           }
           containerRef.current.appendChild(mediaElement);
-          
           setIsAttached(true);
           console.log('[TrackRenderer] Successfully attached video track:', track.sid);
         } catch (error) {
@@ -53,7 +46,6 @@ function TrackRenderer({ track, kind, isLocal }) {
           }
         }
       } else if (kind === 'audio') {
-        // Audio tracks are handled automatically by Twilio
         setIsAttached(true);
       } else if (retryCount < MAX_RETRIES) {
         console.log('[TrackRenderer] Container not ready, retrying...', retryCount + 1);
@@ -96,25 +88,9 @@ const VideoCall = ({ interviewId }) => {
   const [error, setError] = useState(null);
   const [isWaitingForCandidate, setIsWaitingForCandidate] = useState(false);
   const { user } = useAuth();
-  const videoContainerRef = useRef(null);
-  const tracksRef = useRef(new Set());
   const localStreamRef = useRef(null);
-  const reconnectAttemptsRef = useRef(0);
-  const MAX_RECONNECT_ATTEMPTS = 3;
-  const bufferedTracksRef = useRef([]);
-  const [videoContainers, setVideoContainers] = useState([]);
+  const [videoContainers, setVideoContainers] = useState([]); 
   const [trackUpdateCount, setTrackUpdateCount] = useState(0);
-
-  // Attach buffered tracks when the container is ready
-  useEffect(() => {
-    if (videoContainerRef.current && bufferedTracksRef.current.length > 0) {
-      console.log('Processing buffered tracks:', bufferedTracksRef.current.length);
-      bufferedTracksRef.current.forEach(({ track, isLocal }) => {
-        realAddTrackToDOM(track, isLocal);
-      });
-      bufferedTracksRef.current = [];
-    }
-  }, [videoContainerRef.current]);
 
   // Update video containers when tracks change
   useEffect(() => {
@@ -126,54 +102,6 @@ const VideoCall = ({ interviewId }) => {
     })));
   }, [localParticipant, remoteParticipants, trackUpdateCount]);
 
-  // Add a new effect to handle track attachment retries
-  useEffect(() => {
-    let retryTimeout;
-    
-    const retryAttachTracks = () => {
-      if (room && videoContainerRef.current) {
-        console.log('Retrying track attachment for room:', room.sid);
-        room.localParticipant.tracks.forEach(publication => {
-          if (publication.track) {
-            const existingElement = document.getElementById(`video-${publication.track.sid}`);
-            if (!existingElement) {
-              console.log('Retrying attachment for track:', publication.track.sid);
-              tracksRef.current.add(publication.track);
-              addTrackToDOM(publication.track, true);
-            }
-          }
-        });
-      }
-    };
-
-    // Retry track attachment after a short delay
-    if (room) {
-      retryTimeout = setTimeout(retryAttachTracks, 1000);
-    }
-
-    return () => {
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
-      }
-    };
-  }, [room]);
-
-  // Attach local participant tracks when both the participant and container are ready
-  useEffect(() => {
-    if (localParticipant && videoContainerRef.current) {
-      localParticipant.tracks.forEach(publication => {
-        if (publication.track) {
-          // Check if already attached
-          const existingElement = document.getElementById(`video-${publication.track.sid}`);
-          if (!existingElement) {
-            tracksRef.current.add(publication.track);
-            addTrackToDOM(publication.track, true);
-          }
-        }
-      });
-    }
-  }, [localParticipant, videoContainerRef.current]);
-
   useEffect(() => {
     let mounted = true;
     let reconnectTimeout;
@@ -184,11 +112,11 @@ const VideoCall = ({ interviewId }) => {
         const response = await fetch(
           `${import.meta.env.VITE_API_URL}/video/room/${interviewId}`,
           {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
           }
         );
         const data = await response.json();
@@ -196,7 +124,6 @@ const VideoCall = ({ interviewId }) => {
         
         if (data.success && mounted) {
           await connectToRoom(data.data.token);
-          // If user is admin and no remote participants, show waiting room
           if (user?.role === 'admin' && remoteParticipants.length === 0) {
             setIsWaitingForCandidate(true);
           }
@@ -215,7 +142,6 @@ const VideoCall = ({ interviewId }) => {
     };
 
     const handleBeforeUnload = () => {
-      // Clean up before page unload
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -224,46 +150,23 @@ const VideoCall = ({ interviewId }) => {
       }
     };
 
-    // Add beforeunload event listener
     window.addEventListener('beforeunload', handleBeforeUnload);
-
     fetchToken();
 
     return () => {
       mounted = false;
       window.removeEventListener('beforeunload', handleBeforeUnload);
       clearTimeout(reconnectTimeout);
-
-      // Clean up all tracks
-      tracksRef.current.forEach(track => {                                          
-        if (track.stop) {
-          track.stop();
-        }
-        track.detach().forEach(el => el.remove());
-      });
-      tracksRef.current.clear();
-
-      // Stop local stream if it exists
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
         localStreamRef.current = null;
       }
-
-      // Disconnect from room
       if (room) {
         room.disconnect();
-      }
-
-      // Clear video container
-      if (videoContainerRef.current) {
-        while (videoContainerRef.current.firstChild) {
-          videoContainerRef.current.removeChild(videoContainerRef.current.firstChild);
-        }
       }
     };
   }, [interviewId, user?.role]);
 
-  // Update waiting room state when participants change
   useEffect(() => {
     if (user?.role === 'admin') {
       console.log('[VideoCall] Admin remoteParticipants.length:', remoteParticipants.length, remoteParticipants.map(p => p.identity));
@@ -274,23 +177,12 @@ const VideoCall = ({ interviewId }) => {
   const connectToRoom = async (token) => {
     try {
       console.log('[VideoCall] Attempting to connect to room with token. InterviewId:', interviewId, 'User:', user?.email, 'UserID:', user?._id);
-      
-      // Clean up any existing connections first
       if (room) {
-        console.log('Cleaning up existing room connection');
         room.disconnect();
         setRoom(null);
         setLocalParticipant(null);
         setRemoteParticipants([]);
-        tracksRef.current.clear();
-        if (videoContainerRef.current) {
-          while (videoContainerRef.current.firstChild) {
-            videoContainerRef.current.removeChild(videoContainerRef.current.firstChild);
-          }
-        }
       }
-
-      // First check if we can access the devices
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
           audio: true, 
@@ -300,7 +192,6 @@ const VideoCall = ({ interviewId }) => {
             facingMode: 'user'
           } 
         });
-        // Store the stream reference
         localStreamRef.current = stream;
         console.log('Successfully got local media stream');
       } catch (deviceError) {
@@ -314,7 +205,6 @@ const VideoCall = ({ interviewId }) => {
         }
         return;
       }
-
       console.log('[VideoCall] Connecting to Twilio room...');
       const newRoom = await connect(token, {
         name: `interview-${interviewId}`,
@@ -325,180 +215,45 @@ const VideoCall = ({ interviewId }) => {
         }
       });
       console.log('[VideoCall] Successfully connected to room:', newRoom.sid, 'Room name:', newRoom.name, 'Local identity:', newRoom.localParticipant.identity);
-
       setRoom(newRoom);
       setLocalParticipant(newRoom.localParticipant);
-      console.log('[VideoCall] Local participant tracks:', Array.from(newRoom.localParticipant.tracks.values()));
-
-      // Attach local participant tracks immediately if available
-      newRoom.localParticipant.tracks.forEach(publication => {
-        if (publication.track) {
-          console.log('[VideoCall] Attaching local track:', publication.track.kind);
-          tracksRef.current.add(publication.track);
-          addTrackToDOM(publication.track, true);
-        }
-        publication.on('subscribed', track => {
-          console.log('[VideoCall] Local track subscribed:', track.kind);
-          tracksRef.current.add(track);
-          addTrackToDOM(track, true);
-        });
-      });
-
-      // Attach remote participants' tracks
-      newRoom.participants.forEach(participant => {
-        console.log('[VideoCall] Attaching tracks for remote participant:', participant.identity);
-        participant.tracks.forEach(publication => {
-          if (publication.track) {
-            console.log('[VideoCall] Attaching remote track:', publication.track.kind);
-            tracksRef.current.add(publication.track);
-            addTrackToDOM(publication.track, false);
-          }
-          publication.on('subscribed', track => {
-            console.log('[VideoCall] Remote track subscribed:', track.kind);
-            tracksRef.current.add(track);
-            addTrackToDOM(track, false);
-          });
-        });
-      });
-
-      // Listen for new remote participants
       newRoom.on('participantConnected', participant => {
         console.log('[VideoCall] New participant connected:', participant.identity);
         setRemoteParticipants(prev => [...prev, participant]);
         setTrackUpdateCount(count => count + 1);
         participant.tracks.forEach(publication => {
-          if (publication.track) {
-            console.log('[VideoCall] Attaching new participant track:', publication.track.kind);
-            tracksRef.current.add(publication.track);
-            addTrackToDOM(publication.track, false);
-          }
           publication.on('subscribed', track => {
-            console.log('[VideoCall] New participant track subscribed:', track.kind);
-            tracksRef.current.add(track);
-            addTrackToDOM(track, false);
             setTrackUpdateCount(count => count + 1);
           });
         });
       });
-
-      // Listen for participant disconnection
       newRoom.on('participantDisconnected', participant => {
         console.log('[VideoCall] Participant disconnected:', participant.identity);
         setRemoteParticipants(prev => prev.filter(p => p !== participant));
-        removeParticipantTracks(participant);
+        setTrackUpdateCount(count => count + 1);
       });
-
-      // Listen for track subscriptions (for all participants)
       newRoom.on('trackSubscribed', (track, publication, participant) => {
-        console.log('[VideoCall] Track subscribed:', track.kind, 'from participant:', participant.identity);
-        tracksRef.current.add(track);
-        addTrackToDOM(track, participant === newRoom.localParticipant);
         setTrackUpdateCount(count => count + 1);
       });
-
       newRoom.on('trackUnsubscribed', (track, publication, participant) => {
-        console.log('[VideoCall] Track unsubscribed:', track.kind, 'from participant:', participant.identity);
-        tracksRef.current.delete(track);
-        removeTrackFromDOM(track);
         setTrackUpdateCount(count => count + 1);
       });
-
-      // Handle room disconnection
-      newRoom.on('disconnected', () => {
-        console.log('[VideoCall] Room disconnected');
-        setRoom(null);
-        setLocalParticipant(null);
-        setRemoteParticipants([]);
-        tracksRef.current.clear();
+      newRoom.localParticipant.tracks.forEach(publication => {
+        publication.on('subscribed', track => {
+          setTrackUpdateCount(count => count + 1);
+        });
       });
-
+      newRoom.participants.forEach(participant => {
+        participant.tracks.forEach(publication => {
+          publication.on('subscribed', track => {
+            setTrackUpdateCount(count => count + 1);
+          });
+        });
+      });
     } catch (error) {
       console.error('[VideoCall] Error connecting to room:', error);
       setError('Failed to connect to video call. Please try refreshing the page.');
     }
-  };
-
-  const attachTrackWhenReady = (track, isLocal) => {
-    // If container is ready, attach immediately
-    if (videoContainerRef.current) {
-      realAddTrackToDOM(track, isLocal);
-      return;
-    }
-    // Otherwise, observe for container
-    const observer = new MutationObserver(() => {
-      if (videoContainerRef.current) {
-        realAddTrackToDOM(track, isLocal);
-        observer.disconnect();
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-  };
-
-  // Buffering logic for track attachment (override)
-  const addTrackToDOM = (track, isLocal) => {
-    // Listen for trackStarted event (Twilio)
-    if (track.on && typeof track.on === 'function') {
-      track.on('started', () => {
-        realAddTrackToDOM(track, isLocal);
-      });
-    }
-    // Fallback: try to attach every 500ms for 5 seconds
-    let attempts = 0;
-    const maxAttempts = 10;
-    const interval = setInterval(() => {
-      realAddTrackToDOM(track, isLocal);
-      if (++attempts >= maxAttempts) {
-        clearInterval(interval);
-      }
-    }, 500);
-    // Also try immediately
-    realAddTrackToDOM(track, isLocal);
-  };
-
-  // The real function that attaches tracks
-  const realAddTrackToDOM = (track, isLocal) => {
-    const containerId = `video-container-${track.sid}`;
-    const container = document.getElementById(containerId);
-    if (!container) {
-      console.log('Container not ready for track:', track.sid);
-      bufferedTracksRef.current.push({ track, isLocal });
-      return;
-    }
-    // Remove any existing video element for this track
-    const existingElement = document.getElementById(`video-${track.sid}`);
-    if (existingElement) {
-      existingElement.remove();
-    }
-    // Detach any existing attachments
-    track.detach().forEach(el => el.remove());
-    // Create and attach new element
-    const mediaElement = track.attach();
-    mediaElement.id = `video-${track.sid}`;
-    mediaElement.className = `video-participant ${isLocal ? 'local' : 'remote'}`;
-    mediaElement.autoplay = true;
-    mediaElement.playsInline = true;
-    container.appendChild(mediaElement);
-  };
-
-  const removeTrackFromDOM = (track) => {
-    const videoElement = document.getElementById(`video-${track.sid}`);
-    if (videoElement) {
-      const container = videoElement.parentElement;
-      if (container) {
-        container.remove();
-      } else {
-        videoElement.remove();
-      }
-    }
-  };
-
-  const removeParticipantTracks = (participant) => {
-    participant.tracks.forEach(publication => {
-      if (publication.track) {
-        tracksRef.current.delete(publication.track);
-        removeTrackFromDOM(publication.track);
-      }
-    });
   };
 
   const toggleAudio = () => {
@@ -522,8 +277,6 @@ const VideoCall = ({ interviewId }) => {
   // Helper to get all video tracks (local + remote)
   const getAllVideoTracks = () => {
     const tracks = [];
-    
-    // Local participant tracks
     if (localParticipant) {
       localParticipant.tracks.forEach(publication => {
         if (publication.track && publication.track.sid) {
@@ -538,8 +291,6 @@ const VideoCall = ({ interviewId }) => {
         }
       });
     }
-
-    // Remote participant tracks
     remoteParticipants.forEach(participant => {
       participant.tracks.forEach(publication => {
         if (publication.track && publication.track.sid) {
@@ -554,17 +305,14 @@ const VideoCall = ({ interviewId }) => {
         }
       });
     });
-
     console.log('[VideoCall][getAllVideoTracks] Returning tracks:', tracks.map(t => ({
       sid: t.track.sid,
       kind: t.kind,
       isLocal: t.isLocal
     })));
-    
     return tracks;
   };
 
-  // Add cleanup effect
   useEffect(() => {
     return () => {
       console.log('Cleaning up VideoCall component');
@@ -574,7 +322,6 @@ const VideoCall = ({ interviewId }) => {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
-      tracksRef.current.clear();
     };
   }, [room]);
 
@@ -601,7 +348,7 @@ const VideoCall = ({ interviewId }) => {
           <div className="text-white text-2xl mb-4">Waiting for candidate to join...</div>
           <div className="text-gray-400 mb-8">Your video and audio are ready</div>
           <div className="video-container relative w-[400px] aspect-video">
-            <div id={`video-${videoContainers.find(vc => vc.isLocal && vc.kind === 'video')?.id || 'local-waiting'}`} className="video-participant local w-full h-full object-cover rounded-lg"></div>
+            {/* Optionally render local video preview here if desired */}
           </div>
           <div className="mt-8 bg-gray-800 p-2 flex justify-center space-x-4">
             <button
