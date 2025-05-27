@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Video, connect } from 'twilio-video';
 import { useAuth } from '../context/AuthContext';
+import InterviewPanel from './InterviewPanel';
 
 // TrackRenderer component for robust track attachment
 function TrackRenderer({ track, kind, isLocal }) {
@@ -8,6 +9,9 @@ function TrackRenderer({ track, kind, isLocal }) {
   const [isAttached, setIsAttached] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 10;
+
+  // Log on render
+  console.log('[TrackRenderer][render]', { kind, isLocal, track });
 
   useEffect(() => {
     let retryTimeout;
@@ -39,6 +43,8 @@ function TrackRenderer({ track, kind, isLocal }) {
           mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
           mediaElement.autoplay = true;
           mediaElement.playsInline = true;
+          mediaElement.muted = false;
+          mediaElement.volume = 1.0;
           mediaElement.onerror = (e) => {
             console.error('[TrackRenderer] Video element error:', e);
           };
@@ -79,6 +85,8 @@ function TrackRenderer({ track, kind, isLocal }) {
           let audioElement;
           audioElement = track.attach();
           audioElement.autoplay = true;
+          audioElement.muted = false;
+          audioElement.volume = 1.0;
           audioElement.style.display = 'none';
           document.body.appendChild(audioElement);
           console.log('[TrackRenderer] Attached remote audio track:', track.sid || track.id);
@@ -91,6 +99,7 @@ function TrackRenderer({ track, kind, isLocal }) {
             }
           };
         }
+        setIsAttached(true);
       } else if (retryCount < MAX_RETRIES) {
         console.log('[TrackRenderer] Container not ready, retrying...', {
           retryCount: retryCount + 1,
@@ -122,7 +131,21 @@ function TrackRenderer({ track, kind, isLocal }) {
       <div
         ref={containerRef}
         className="video-container relative flex-1 min-w-[300px] max-w-[calc(50%-8px)] aspect-video bg-gray-900 rounded-lg overflow-hidden"
-      />
+      >
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          background: 'rgba(0,0,0,0.5)',
+          color: 'white',
+          padding: '2px 6px',
+          borderRadius: 4,
+          fontSize: 12,
+          zIndex: 10
+        }}>
+          {isLocal ? 'Local' : 'Remote'}
+        </div>
+      </div>
     );
   } else if (kind === 'audio') {
     return null;
@@ -480,8 +503,9 @@ const VideoCall = ({ interviewId }) => {
   console.log('[VideoCall][render] videoContainers:', videoContainers);
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-gray-900">
-      <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
+    <div className="fixed inset-0 flex flex-row bg-gray-900">
+      {/* Video area (left) */}
+      <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden min-w-0">
         {videoContainers.map(({ track, isLocal, kind }) => {
           if (!track) {
             console.log('[VideoCall] Skipping invalid track:', track);
@@ -497,7 +521,12 @@ const VideoCall = ({ interviewId }) => {
           );
         })}
       </div>
-      <div className="bg-gray-800 p-2 flex justify-center space-x-4">
+      {/* InterviewPanel (right) */}
+      <div className="w-full max-w-xs md:max-w-sm lg:max-w-md flex flex-col justify-start items-stretch bg-gray-100 h-full border-l border-gray-300 p-2 overflow-y-auto">
+        <InterviewPanel interviewId={interviewId} />
+      </div>
+      {/* Controls and toast remain at the bottom, outside flex row */}
+      <div className="absolute bottom-0 left-0 w-full bg-gray-800 p-2 flex justify-center space-x-4">
         <button
           onClick={toggleAudio}
           className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white"
