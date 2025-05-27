@@ -385,7 +385,7 @@ const VideoCall = ({ interviewId }) => {
     }
   };
 
-  // Helper to get all video tracks (local + remote)
+  // Updated getAllVideoTracks function
   const getAllVideoTracks = () => {
     const tracks = [];
     if (localParticipant) {
@@ -393,11 +393,14 @@ const VideoCall = ({ interviewId }) => {
         if (publication.track) {
           const track = publication.track;
           if (track.kind === 'video' || track.kind === 'audio') {
-            tracks.push({
-              track,
-              isLocal: true,
-              kind: track.kind
-            });
+            // Ensure track is fully ready (has id or sid)
+            if (track.id || track.sid) {
+              tracks.push({
+                track,
+                isLocal: true,
+                kind: track.kind
+              });
+            }
           }
         }
       });
@@ -408,11 +411,14 @@ const VideoCall = ({ interviewId }) => {
         if (publication.track) {
           const track = publication.track;
           if (track.kind === 'video' || track.kind === 'audio') {
-            tracks.push({
-              track,
-              isLocal: false,
-              kind: track.kind
-            });
+            // Ensure track is fully ready (has id or sid)
+            if (track.id || track.sid) {
+              tracks.push({
+                track,
+                isLocal: false,
+                kind: track.kind
+              });
+            }
           }
         }
       });
@@ -545,7 +551,7 @@ const VideoCall = ({ interviewId }) => {
           }
           return (
             <TrackRenderer 
-              key={`${track.sid || track.id || (isLocal ? 'local' : 'remote')}-${kind}`} 
+              key={`${track.sid || track.id || (isLocal ? 'local' : 'remote')}-${kind}-${isLocal ? 'local' : 'remote'}`} 
               track={track} 
               kind={kind} 
               isLocal={isLocal} 
