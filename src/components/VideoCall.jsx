@@ -22,6 +22,9 @@ function TrackRenderer({ track, kind, isLocal }) {
       }
 
       if (kind === 'video' && containerRef.current) {
+        // Force enable and restart if possible
+        if (typeof track.enable === 'function') track.enable();
+        if (typeof track.restart === 'function') track.restart();
         console.log('[TrackRenderer] Attempting to attach video track:', {
           sid: track.sid,
           id: track.id,
@@ -36,6 +39,9 @@ function TrackRenderer({ track, kind, isLocal }) {
           mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
           mediaElement.autoplay = true;
           mediaElement.playsInline = true;
+          mediaElement.onerror = (e) => {
+            console.error('[TrackRenderer] Video element error:', e);
+          };
           while (containerRef.current.firstChild) {
             containerRef.current.removeChild(containerRef.current.firstChild);
           }
@@ -47,6 +53,17 @@ function TrackRenderer({ track, kind, isLocal }) {
             isLocal,
             elementId: mediaElement.id
           });
+          // Log video element state
+          setTimeout(() => {
+            console.log('[TrackRenderer] Video element state:', {
+              paused: mediaElement.paused,
+              ended: mediaElement.ended,
+              readyState: mediaElement.readyState,
+              srcObject: mediaElement.srcObject,
+              videoWidth: mediaElement.videoWidth,
+              videoHeight: mediaElement.videoHeight
+            });
+          }, 500);
         } catch (error) {
           console.error('[TrackRenderer] Error attaching track:', error);
           if (retryCount < MAX_RETRIES) {
