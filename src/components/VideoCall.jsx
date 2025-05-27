@@ -365,13 +365,15 @@ const VideoCall = ({ interviewId }) => {
         });
         setTrackUpdateCount(count => count + 1);
       });
-      // Already handled above for local participant
-      newRoom.participants.forEach(participant => {
+      // Add all existing participants to remoteParticipants
+      const initialParticipants = Array.from(newRoom.participants.values());
+      setRemoteParticipants(initialParticipants);
+      initialParticipants.forEach(participant => {
         console.log('[VideoCall][Twilio] initial participant:', participant.identity, participant);
         setupParticipantTrackListeners(participant, setTrackUpdateCount);
       });
       // Log all participants in the room
-      console.log('[VideoCall][Twilio] All participants in room:', Array.from(newRoom.participants.values()).map(p => p.identity));
+      console.log('[VideoCall][Twilio] All participants in room:', initialParticipants.map(p => p.identity));
     } catch (error) {
       console.error('[VideoCall] Error connecting to room:', error);
       setError('Failed to connect to video call. Please try refreshing the page.');
