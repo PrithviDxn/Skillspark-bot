@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Video, connect } from 'twilio-video';
+import { Video, connect, createLocalVideoTrack, createLocalAudioTrack } from 'twilio-video';
 import { useAuth } from '../context/AuthContext';
 
 // TrackRenderer component for robust track attachment
@@ -183,17 +183,16 @@ const VideoCall = ({ interviewId }) => {
         setLocalParticipant(null);
         setRemoteParticipants([]);
       }
+      let localVideoTrack, localAudioTrack;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: true, 
-          video: { 
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: 'user'
-          } 
+        localVideoTrack = await createLocalVideoTrack({
+          width: 1280,
+          height: 720,
+          facingMode: 'user'
         });
-        localStreamRef.current = stream;
-        console.log('Successfully got local media stream');
+        localAudioTrack = await createLocalAudioTrack();
+        localStreamRef.current = { video: localVideoTrack, audio: localAudioTrack };
+        console.log('Successfully got local Twilio tracks');
       } catch (deviceError) {
         console.error('Device access error:', deviceError);
         if (deviceError.name === 'NotFoundError') {
@@ -208,16 +207,11 @@ const VideoCall = ({ interviewId }) => {
       console.log('[VideoCall] Connecting to Twilio room...');
       const newRoom = await connect(token, {
         name: `interview-${interviewId}`,
-        audio: true,
-        video: { 
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
+        tracks: [localAudioTrack, localVideoTrack],
       });
       console.log('[VideoCall] Successfully connected to room:', newRoom.sid, 'Room name:', newRoom.name, 'Local identity:', newRoom.localParticipant.identity);
       setRoom(newRoom);
       setLocalParticipant(newRoom.localParticipant);
-
       // --- Listen for local track events and update state ---
       newRoom.localParticipant.tracks.forEach(publication => {
         if (publication.track) {
@@ -234,7 +228,6 @@ const VideoCall = ({ interviewId }) => {
         setTrackUpdateCount(count => count + 1);
       });
       // --- End local track event listeners ---
-
       newRoom.on('participantConnected', participant => {
         console.log('[VideoCall] New participant connected:', participant.identity);
         setRemoteParticipants(prev => [...prev, participant]);
@@ -293,7 +286,7 @@ const VideoCall = ({ interviewId }) => {
     const tracks = [];
     if (localParticipant) {
       localParticipant.tracks.forEach(publication => {
-        if (publication.track && publication.track.sid) {
+        if (publication.track) {
           const track = publication.track;
           if (track.kind === 'video' || track.kind === 'audio') {
             tracks.push({
@@ -304,10 +297,27 @@ const VideoCall = ({ interviewId }) => {
           }
         }
       });
+      // Fallback: If no published tracks, use localStreamRef
+      if (tracks.filter(t => t.isLocal).length === 0 && localStreamRef.current) {
+        if (localStreamRef.current.video) {
+          tracks.push({
+            track: localStreamRef.current.video,
+            isLocal: true,
+            kind: 'video'
+          });
+        }
+        if (localStreamRef.current.audio) {
+          tracks.push({
+            track: localStreamRef.current.audio,
+            isLocal: true,
+            kind: 'audio'
+          });
+        }
+      }
     }
     remoteParticipants.forEach(participant => {
       participant.tracks.forEach(publication => {
-        if (publication.track && publication.track.sid) {
+        if (publication.track) {
           const track = publication.track;
           if (track.kind === 'video' || track.kind === 'audio') {
             tracks.push({
@@ -410,13 +420,13 @@ const VideoCall = ({ interviewId }) => {
     <div className="fixed inset-0 flex flex-col bg-gray-900">
       <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
         {videoContainers.map(({ track, isLocal, kind }) => {
-          if (!track || !track.sid) {
+          if (!track) {
             console.log('[VideoCall] Skipping invalid track:', track);
             return null;
           }
           return (
             <TrackRenderer 
-              key={`${track.sid}-${kind}`} 
+              key={`${track.sid || track.id || (isLocal ? 'local' : 'remote')}-${kind}`} 
               track={track} 
               kind={kind} 
               isLocal={isLocal} 
