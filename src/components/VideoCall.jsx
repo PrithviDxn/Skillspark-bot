@@ -189,6 +189,7 @@ const VideoCall = ({ interviewId }) => {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
+  const [mediaUnlocked, setMediaUnlocked] = useState(false);
 
   // Toast effect
   useEffect(() => {
@@ -327,13 +328,21 @@ const VideoCall = ({ interviewId }) => {
       // --- End local track event listeners ---
       newRoom.on('participantConnected', participant => {
         console.log('[VideoCall] New participant connected:', participant.identity);
-        setRemoteParticipants(prev => [...prev, participant]);
+        setRemoteParticipants(prev => {
+          const updated = [...prev, participant];
+          console.log('[VideoCall][remoteParticipants][after connect]', updated.map(p => p.identity));
+          return updated;
+        });
         setupParticipantTrackListeners(participant, setTrackUpdateCount);
         setTrackUpdateCount(count => count + 1);
       });
       newRoom.on('participantDisconnected', participant => {
         console.log('[VideoCall] Participant disconnected:', participant.identity);
-        setRemoteParticipants(prev => prev.filter(p => p !== participant));
+        setRemoteParticipants(prev => {
+          const updated = prev.filter(p => p !== participant);
+          console.log('[VideoCall][remoteParticipants][after disconnect]', updated.map(p => p.identity));
+          return updated;
+        });
         setTrackUpdateCount(count => count + 1);
       });
       newRoom.on('trackSubscribed', (track, publication, participant) => {
@@ -427,6 +436,20 @@ const VideoCall = ({ interviewId }) => {
     };
   }, [room]);
 
+  // Helper to play all media elements (for autoplay policy)
+  const unlockMedia = () => {
+    const videos = Array.from(document.querySelectorAll('video'));
+    const audios = Array.from(document.querySelectorAll('audio'));
+    videos.forEach(v => { try { v.muted = false; v.volume = 1.0; v.play(); } catch (e) { console.error('Video play error', e); } });
+    audios.forEach(a => { try { a.muted = false; a.volume = 1.0; a.play(); } catch (e) { console.error('Audio play error', e); } });
+    setMediaUnlocked(true);
+  };
+
+  // Add a useEffect to log remoteParticipants on every change
+  useEffect(() => {
+    console.log('[VideoCall][remoteParticipants][state]', remoteParticipants.map(p => p.identity));
+  }, [remoteParticipants]);
+
   if (isConnecting) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -503,6 +526,17 @@ const VideoCall = ({ interviewId }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
+      {/* Unlock media button for candidate if remote tracks exist */}
+      {user?.role !== 'admin' && videoContainers.some(vc => !vc.isLocal) && !mediaUnlocked && (
+        <div className="absolute top-4 right-4 z-50">
+          <button
+            onClick={unlockMedia}
+            className="bg-blue-600 text-white px-4 py-2 rounded shadow-lg hover:bg-blue-700"
+          >
+            Click to enable audio/video
+          </button>
+        </div>
+      )}
       <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
         {videoContainers.map(({ track, isLocal, kind }) => {
           if (!track) {
