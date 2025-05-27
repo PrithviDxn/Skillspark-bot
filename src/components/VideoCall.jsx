@@ -327,34 +327,51 @@ const VideoCall = ({ interviewId }) => {
       });
       // --- End local track event listeners ---
       newRoom.on('participantConnected', participant => {
-        console.log('[VideoCall] New participant connected:', participant.identity);
+        console.log('[VideoCall][Twilio] participantConnected:', participant.identity, participant);
         setRemoteParticipants(prev => {
           const updated = [...prev, participant];
-          console.log('[VideoCall][remoteParticipants][after connect]', updated.map(p => p.identity));
+          console.log('[VideoCall][remoteParticipants][after connect]', updated.map(p => p.identity), updated);
           return updated;
         });
         setupParticipantTrackListeners(participant, setTrackUpdateCount);
         setTrackUpdateCount(count => count + 1);
       });
       newRoom.on('participantDisconnected', participant => {
-        console.log('[VideoCall] Participant disconnected:', participant.identity);
+        console.log('[VideoCall][Twilio] participantDisconnected:', participant.identity, participant);
         setRemoteParticipants(prev => {
           const updated = prev.filter(p => p !== participant);
-          console.log('[VideoCall][remoteParticipants][after disconnect]', updated.map(p => p.identity));
+          console.log('[VideoCall][remoteParticipants][after disconnect]', updated.map(p => p.identity), updated);
           return updated;
         });
         setTrackUpdateCount(count => count + 1);
       });
       newRoom.on('trackSubscribed', (track, publication, participant) => {
+        console.log('[VideoCall][Twilio] trackSubscribed:', {
+          participant: participant?.identity,
+          kind: track.kind,
+          sid: track.sid,
+          id: track.id,
+          publication
+        });
         setTrackUpdateCount(count => count + 1);
       });
       newRoom.on('trackUnsubscribed', (track, publication, participant) => {
+        console.log('[VideoCall][Twilio] trackUnsubscribed:', {
+          participant: participant?.identity,
+          kind: track.kind,
+          sid: track.sid,
+          id: track.id,
+          publication
+        });
         setTrackUpdateCount(count => count + 1);
       });
       // Already handled above for local participant
       newRoom.participants.forEach(participant => {
+        console.log('[VideoCall][Twilio] initial participant:', participant.identity, participant);
         setupParticipantTrackListeners(participant, setTrackUpdateCount);
       });
+      // Log all participants in the room
+      console.log('[VideoCall][Twilio] All participants in room:', Array.from(newRoom.participants.values()).map(p => p.identity));
     } catch (error) {
       console.error('[VideoCall] Error connecting to room:', error);
       setError('Failed to connect to video call. Please try refreshing the page.');
@@ -453,7 +470,7 @@ const VideoCall = ({ interviewId }) => {
 
   // Add a useEffect to log remoteParticipants on every change
   useEffect(() => {
-    console.log('[VideoCall][remoteParticipants][state]', remoteParticipants.map(p => p.identity));
+    console.log('[VideoCall][remoteParticipants][state]', remoteParticipants.map(p => p.identity), remoteParticipants);
   }, [remoteParticipants]);
 
   if (isConnecting) {
