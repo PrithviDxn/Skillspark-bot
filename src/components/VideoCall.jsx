@@ -16,17 +16,23 @@ function TrackRenderer({ track, kind, isLocal }) {
     const tryAttach = () => {
       if (!mounted) return;
 
-      if (!track || !track.sid) {
+      if (!track) {
         console.log('[TrackRenderer] Invalid track:', track);
         return;
       }
 
       if (kind === 'video' && containerRef.current) {
-        console.log('[TrackRenderer] Attempting to attach video track:', track.sid, isLocal ? 'local' : 'remote');
+        console.log('[TrackRenderer] Attempting to attach video track:', {
+          sid: track.sid,
+          id: track.id,
+          isLocal,
+          containerReady: !!containerRef.current,
+          trackEnabled: track.isEnabled
+        });
         try {
           track.detach().forEach(el => el.remove());
           const mediaElement = track.attach();
-          mediaElement.id = `video-${track.sid}`;
+          mediaElement.id = `video-${track.sid || track.id || (isLocal ? 'local' : 'remote')}`;
           mediaElement.className = `video-participant w-full h-full object-cover rounded-lg ${isLocal ? 'local' : 'remote'}`;
           mediaElement.autoplay = true;
           mediaElement.playsInline = true;
@@ -35,7 +41,12 @@ function TrackRenderer({ track, kind, isLocal }) {
           }
           containerRef.current.appendChild(mediaElement);
           setIsAttached(true);
-          console.log('[TrackRenderer] Successfully attached video track:', track.sid);
+          console.log('[TrackRenderer] Successfully attached video track:', {
+            sid: track.sid,
+            id: track.id,
+            isLocal,
+            elementId: mediaElement.id
+          });
         } catch (error) {
           console.error('[TrackRenderer] Error attaching track:', error);
           if (retryCount < MAX_RETRIES) {
@@ -48,7 +59,13 @@ function TrackRenderer({ track, kind, isLocal }) {
       } else if (kind === 'audio') {
         setIsAttached(true);
       } else if (retryCount < MAX_RETRIES) {
-        console.log('[TrackRenderer] Container not ready, retrying...', retryCount + 1);
+        console.log('[TrackRenderer] Container not ready, retrying...', {
+          retryCount: retryCount + 1,
+          kind,
+          isLocal,
+          trackSid: track.sid,
+          trackId: track.id
+        });
         retryTimeout = setTimeout(() => {
           setRetryCount(prev => prev + 1);
           tryAttach();
@@ -143,7 +160,13 @@ const VideoCall = ({ interviewId }) => {
 
     const handleBeforeUnload = () => {
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
+        if (localStreamRef.current.video) {
+          localStreamRef.current.video.stop();
+        }
+        if (localStreamRef.current.audio) {
+          localStreamRef.current.audio.stop();
+        }
+        localStreamRef.current = null;
       }
       if (room) {
         room.disconnect();
@@ -344,7 +367,13 @@ const VideoCall = ({ interviewId }) => {
         room.disconnect();
       }
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
+        if (localStreamRef.current.video) {
+          localStreamRef.current.video.stop();
+        }
+        if (localStreamRef.current.audio) {
+          localStreamRef.current.audio.stop();
+        }
+        localStreamRef.current = null;
       }
     };
   }, [room]);
