@@ -74,7 +74,23 @@ function TrackRenderer({ track, kind, isLocal }) {
           }
         }
       } else if (kind === 'audio') {
-        setIsAttached(true);
+        if (track && !isLocal) {
+          track.detach().forEach(el => el.remove());
+          let audioElement;
+          audioElement = track.attach();
+          audioElement.autoplay = true;
+          audioElement.style.display = 'none';
+          document.body.appendChild(audioElement);
+          console.log('[TrackRenderer] Attached remote audio track:', track.sid || track.id);
+          return () => {
+            if (audioElement) {
+              audioElement.remove();
+            }
+            if (track && !isLocal) {
+              track.detach().forEach(el => el.remove());
+            }
+          };
+        }
       } else if (retryCount < MAX_RETRIES) {
         console.log('[TrackRenderer] Container not ready, retrying...', {
           retryCount: retryCount + 1,
@@ -109,24 +125,6 @@ function TrackRenderer({ track, kind, isLocal }) {
       />
     );
   } else if (kind === 'audio') {
-    useEffect(() => {
-      let audioElement;
-      if (track) {
-        track.detach().forEach(el => el.remove());
-        audioElement = track.attach();
-        audioElement.autoplay = true;
-        audioElement.style.display = 'none';
-        document.body.appendChild(audioElement);
-      }
-      return () => {
-        if (audioElement) {
-          audioElement.remove();
-        }
-        if (track) {
-          track.detach().forEach(el => el.remove());
-        }
-      };
-    }, [track]);
     return null;
   }
   return null;
