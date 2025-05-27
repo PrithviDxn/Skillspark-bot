@@ -425,6 +425,7 @@ const VideoCall = ({ interviewId }) => {
       }
     }
     remoteParticipants.forEach(participant => {
+      if (participant.identity === localParticipant?.identity) return; // skip self
       participant.tracks.forEach(publication => {
         if (publication.track) {
           const track = publication.track;
@@ -441,7 +442,9 @@ const VideoCall = ({ interviewId }) => {
     console.log('[VideoCall][getAllVideoTracks] Returning tracks:', tracks.map(t => ({
       sid: t.track.sid,
       kind: t.kind,
-      isLocal: t.isLocal
+      isLocal: t.isLocal,
+      trackId: t.track.id,
+      participantIdentity: t.track?.participant?.identity
     })));
     return tracks;
   };
