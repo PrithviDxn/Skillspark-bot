@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Video, connect, createLocalVideoTrack, createLocalAudioTrack } from 'twilio-video';
+import { Video, connect } from 'twilio-video';
 import { useAuth } from '../context/AuthContext';
 
 // TrackRenderer component for robust track attachment
@@ -163,7 +163,6 @@ const VideoCall = ({ interviewId }) => {
   const [error, setError] = useState(null);
   const [isWaitingForCandidate, setIsWaitingForCandidate] = useState(false);
   const { user } = useAuth();
-  const localStreamRef = useRef(null);
   const [videoContainers, setVideoContainers] = useState([]); 
   const [trackUpdateCount, setTrackUpdateCount] = useState(0);
   // New state for mic/cam and toast
@@ -247,15 +246,6 @@ const VideoCall = ({ interviewId }) => {
     };
 
     const handleBeforeUnload = () => {
-      if (localStreamRef.current) {
-        if (localStreamRef.current.video) {
-          localStreamRef.current.video.stop();
-        }
-        if (localStreamRef.current.audio) {
-          localStreamRef.current.audio.stop();
-        }
-        localStreamRef.current = null;
-      }
       if (room) {
         room.disconnect();
       }
@@ -268,10 +258,6 @@ const VideoCall = ({ interviewId }) => {
       mounted = false;
       window.removeEventListener('beforeunload', handleBeforeUnload);
       clearTimeout(reconnectTimeout);
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-        localStreamRef.current = null;
-      }
       if (room) {
         room.disconnect();
       }
@@ -294,31 +280,11 @@ const VideoCall = ({ interviewId }) => {
         setLocalParticipant(null);
         setRemoteParticipants([]);
       }
-      let localVideoTrack, localAudioTrack;
-      try {
-        localVideoTrack = await createLocalVideoTrack({
-          width: 1280,
-          height: 720,
-          facingMode: 'user'
-        });
-        localAudioTrack = await createLocalAudioTrack();
-        localStreamRef.current = { video: localVideoTrack, audio: localAudioTrack };
-        console.log('Successfully got local Twilio tracks');
-      } catch (deviceError) {
-        console.error('Device access error:', deviceError);
-        if (deviceError.name === 'NotFoundError') {
-          setError('No camera or microphone found. Please connect a camera and microphone and try again.');
-        } else if (deviceError.name === 'NotAllowedError') {
-          setError('Camera and microphone access was denied. Please allow access in your browser settings and try again.');
-        } else {
-          setError(`Device access error: ${deviceError.message}`);
-        }
-        return;
-      }
       console.log('[VideoCall] Connecting to Twilio room...');
       const newRoom = await connect(token, {
         name: `interview-${interviewId}`,
-        tracks: [localAudioTrack, localVideoTrack],
+        audio: true,
+        video: { width: 1280, height: 720, facingMode: 'user' }
       });
       console.log('[VideoCall] Successfully connected to room:', newRoom.sid, 'Room name:', newRoom.name, 'Local identity:', newRoom.localParticipant.identity);
       setRoom(newRoom);
@@ -406,23 +372,6 @@ const VideoCall = ({ interviewId }) => {
           }
         }
       });
-      // Fallback: If no published tracks, use localStreamRef
-      if (tracks.filter(t => t.isLocal).length === 0 && localStreamRef.current) {
-        if (localStreamRef.current.video) {
-          tracks.push({
-            track: localStreamRef.current.video,
-            isLocal: true,
-            kind: 'video'
-          });
-        }
-        if (localStreamRef.current.audio) {
-          tracks.push({
-            track: localStreamRef.current.audio,
-            isLocal: true,
-            kind: 'audio'
-          });
-        }
-      }
     }
     remoteParticipants.forEach(participant => {
       if (participant.identity === localParticipant?.identity) return; // skip self
@@ -454,15 +403,6 @@ const VideoCall = ({ interviewId }) => {
       console.log('Cleaning up VideoCall component');
       if (room) {
         room.disconnect();
-      }
-      if (localStreamRef.current) {
-        if (localStreamRef.current.video) {
-          localStreamRef.current.video.stop();
-        }
-        if (localStreamRef.current.audio) {
-          localStreamRef.current.audio.stop();
-        }
-        localStreamRef.current = null;
       }
     };
   }, [room]);
