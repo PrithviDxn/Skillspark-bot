@@ -132,6 +132,29 @@ function TrackRenderer({ track, kind, isLocal }) {
   return null;
 }
 
+// Add this helper function
+function setupParticipantTrackListeners(participant, setTrackUpdateCount) {
+  // For all existing publications
+  participant.tracks.forEach(publication => {
+    if (publication.track) {
+      setTrackUpdateCount(count => count + 1);
+    }
+    publication.on('subscribed', () => setTrackUpdateCount(count => count + 1));
+    publication.on('unsubscribed', () => setTrackUpdateCount(count => count + 1));
+    publication.on('trackEnabled', () => setTrackUpdateCount(count => count + 1));
+    publication.on('trackDisabled', () => setTrackUpdateCount(count => count + 1));
+  });
+  // For future publications
+  participant.on('trackPublished', publication => {
+    publication.on('subscribed', () => setTrackUpdateCount(count => count + 1));
+    publication.on('unsubscribed', () => setTrackUpdateCount(count => count + 1));
+    publication.on('trackEnabled', () => setTrackUpdateCount(count => count + 1));
+    publication.on('trackDisabled', () => setTrackUpdateCount(count => count + 1));
+    setTrackUpdateCount(count => count + 1);
+  });
+  participant.on('trackUnpublished', () => setTrackUpdateCount(count => count + 1));
+}
+
 const VideoCall = ({ interviewId }) => {
   const [room, setRoom] = useState(null);
   const [localParticipant, setLocalParticipant] = useState(null);
@@ -143,6 +166,18 @@ const VideoCall = ({ interviewId }) => {
   const localStreamRef = useRef(null);
   const [videoContainers, setVideoContainers] = useState([]); 
   const [trackUpdateCount, setTrackUpdateCount] = useState(0);
+  // New state for mic/cam and toast
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [toastMessage, setToastMessage] = useState('');
+
+  // Toast effect
+  useEffect(() => {
+    if (toastMessage) {
+      const timeout = setTimeout(() => setToastMessage(''), 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [toastMessage]);
 
   // Update video containers when tracks change
   useEffect(() => {
@@ -153,6 +188,24 @@ const VideoCall = ({ interviewId }) => {
       kind
     })));
   }, [localParticipant, remoteParticipants, trackUpdateCount]);
+
+  // Update isAudioEnabled/isVideoEnabled when localParticipant changes
+  useEffect(() => {
+    if (localParticipant) {
+      // Audio
+      let enabled = true;
+      for (let pub of localParticipant.audioTracks.values()) {
+        if (pub.track && pub.track.isEnabled === false) enabled = false;
+      }
+      setIsAudioEnabled(enabled);
+      // Video
+      enabled = true;
+      for (let pub of localParticipant.videoTracks.values()) {
+        if (pub.track && pub.track.isEnabled === false) enabled = false;
+      }
+      setIsVideoEnabled(enabled);
+    }
+  }, [localParticipant, trackUpdateCount]);
 
   useEffect(() => {
     let mounted = true;
@@ -289,12 +342,8 @@ const VideoCall = ({ interviewId }) => {
       newRoom.on('participantConnected', participant => {
         console.log('[VideoCall] New participant connected:', participant.identity);
         setRemoteParticipants(prev => [...prev, participant]);
+        setupParticipantTrackListeners(participant, setTrackUpdateCount);
         setTrackUpdateCount(count => count + 1);
-        participant.tracks.forEach(publication => {
-          publication.on('subscribed', track => {
-            setTrackUpdateCount(count => count + 1);
-          });
-        });
       });
       newRoom.on('participantDisconnected', participant => {
         console.log('[VideoCall] Participant disconnected:', participant.identity);
@@ -309,11 +358,7 @@ const VideoCall = ({ interviewId }) => {
       });
       // Already handled above for local participant
       newRoom.participants.forEach(participant => {
-        participant.tracks.forEach(publication => {
-          publication.on('subscribed', track => {
-            setTrackUpdateCount(count => count + 1);
-          });
-        });
+        setupParticipantTrackListeners(participant, setTrackUpdateCount);
       });
     } catch (error) {
       console.error('[VideoCall] Error connecting to room:', error);
@@ -325,7 +370,10 @@ const VideoCall = ({ interviewId }) => {
     if (localParticipant) {
       const audioTrack = localParticipant.audioTracks.values().next().value;
       if (audioTrack) {
-        audioTrack.track.enable(!audioTrack.track.isEnabled);
+        const newState = !audioTrack.track.isEnabled;
+        audioTrack.track.enable(newState);
+        setIsAudioEnabled(newState);
+        setToastMessage(newState ? 'Mic is on' : 'Mic is off');
       }
     }
   };
@@ -334,7 +382,10 @@ const VideoCall = ({ interviewId }) => {
     if (localParticipant) {
       const videoTrack = localParticipant.videoTracks.values().next().value;
       if (videoTrack) {
-        videoTrack.track.enable(!videoTrack.track.isEnabled);
+        const newState = !videoTrack.track.isEnabled;
+        videoTrack.track.enable(newState);
+        setIsVideoEnabled(newState);
+        setToastMessage(newState ? 'Camera is on' : 'Camera is off');
       }
     }
   };
@@ -452,9 +503,16 @@ const VideoCall = ({ interviewId }) => {
               onClick={toggleAudio}
               className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
+              {/* Mic icon, slashed if muted */}
+              {isAudioEnabled ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5a3 3 0 016 0v6a3 3 0 01-3 3m-7-3a7 7 0 0014 0m-7 7v4m0 0H8m4 0h4M3 3l18 18" />
+                </svg>
+              )}
             </button>
             <button
               onClick={toggleVideo}
@@ -503,17 +561,31 @@ const VideoCall = ({ interviewId }) => {
           onClick={toggleAudio}
           className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
+          {/* Mic icon, slashed if muted */}
+          {isAudioEnabled ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5a3 3 0 016 0v6a3 3 0 01-3 3m-7-3a7 7 0 0014 0m-7 7v4m0 0H8m4 0h4M3 3l18 18" />
+            </svg>
+          )}
         </button>
         <button
           onClick={toggleVideo}
           className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
+          {/* Video icon, slashed if off */}
+          {isVideoEnabled ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2zm-6-6l16 16" />
+            </svg>
+          )}
         </button>
         <button
           onClick={() => room && room.disconnect()}
@@ -524,6 +596,12 @@ const VideoCall = ({ interviewId }) => {
           </svg>
         </button>
       </div>
+      {/* Toast popup */}
+      {toastMessage && (
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 text-lg animate-fade-in">
+          {toastMessage}
+        </div>
+      )}
     </div>
   );
 };
