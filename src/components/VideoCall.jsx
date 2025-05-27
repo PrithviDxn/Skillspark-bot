@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Video, connect } from 'twilio-video';
 import { useAuth } from '../context/AuthContext';
-import InterviewPanel from './InterviewPanel';
 
 // TrackRenderer component for robust track attachment
 function TrackRenderer({ track, kind, isLocal }) {
@@ -503,9 +502,8 @@ const VideoCall = ({ interviewId }) => {
   console.log('[VideoCall][render] videoContainers:', videoContainers);
 
   return (
-    <div className="fixed inset-0 flex flex-row bg-gray-900">
-      {/* Video area (left) */}
-      <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden min-w-0">
+    <div className="fixed inset-0 flex flex-col bg-gray-900">
+      <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
         {videoContainers.map(({ track, isLocal, kind }) => {
           if (!track) {
             console.log('[VideoCall] Skipping invalid track:', track);
@@ -521,12 +519,7 @@ const VideoCall = ({ interviewId }) => {
           );
         })}
       </div>
-      {/* InterviewPanel (right) */}
-      <div className="w-full max-w-xs md:max-w-sm lg:max-w-md flex flex-col justify-start items-stretch bg-gray-100 h-full border-l border-gray-300 p-2 overflow-y-auto">
-        <InterviewPanel interviewId={interviewId} />
-      </div>
-      {/* Controls and toast remain at the bottom, outside flex row */}
-      <div className="absolute bottom-0 left-0 w-full bg-gray-800 p-2 flex justify-center space-x-4">
+      <div className="bg-gray-800 p-2 flex justify-center space-x-4">
         <button
           onClick={toggleAudio}
           className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white"
