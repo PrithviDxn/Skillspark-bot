@@ -109,7 +109,25 @@ function TrackRenderer({ track, kind, isLocal }) {
       />
     );
   } else if (kind === 'audio') {
-    return <div style={{ display: 'none' }} />;
+    useEffect(() => {
+      let audioElement;
+      if (track) {
+        track.detach().forEach(el => el.remove());
+        audioElement = track.attach();
+        audioElement.autoplay = true;
+        audioElement.style.display = 'none';
+        document.body.appendChild(audioElement);
+      }
+      return () => {
+        if (audioElement) {
+          audioElement.remove();
+        }
+        if (track) {
+          track.detach().forEach(el => el.remove());
+        }
+      };
+    }, [track]);
+    return null;
   }
   return null;
 }
