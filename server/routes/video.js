@@ -1,6 +1,7 @@
 import express from 'express';
 import { createVideoRoom, generateAccessToken } from '../services/twilioService.js';
 import { protect } from '../middleware/auth.js';
+import { handleTwilioRecordingWebhook } from '../controllers/twilioRecordingController.js';
 
 const router = express.Router();
 
@@ -34,5 +35,7 @@ router.post('/room/:interviewId', protect, async (req, res, next) => {
     });
   }
 });
+
+router.post('/recording-webhook', handleTwilioRecordingWebhook);
 
 export default router; 

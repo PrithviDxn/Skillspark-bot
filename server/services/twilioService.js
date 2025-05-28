@@ -24,7 +24,8 @@ const createVideoRoom = async (interviewId) => {
       const room = await client.video.rooms.create({
         uniqueName: roomName,
         type: 'group',
-        maxParticipants: 2
+        maxParticipants: 2,
+        recordParticipantsOnConnect: true
       });
       return room.sid;
     } else {
