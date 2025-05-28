@@ -263,4 +263,27 @@ router.post('/:id/join', async (req, res) => {
   }
 });
 
+// @desc    Mark interview as completed
+// @route   POST /api/v1/interviews/:id/complete
+// @access  Private
+router.post('/:id/complete', protect, async (req, res) => {
+  try {
+    const interview = await Interview.findById(req.params.id);
+    if (!interview) {
+      return res.status(404).json({ success: false, error: 'Interview not found' });
+    }
+    // Only admin or candidate can complete
+    const candidateId = interview.candidate._id || interview.candidate;
+    if (candidateId.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    interview.status = 'completed';
+    interview.completedAt = new Date();
+    await interview.save();
+    res.status(200).json({ success: true, data: interview });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 export default router; 

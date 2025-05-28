@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Video, connect } from 'twilio-video';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 // TrackRenderer component for robust track attachment
 function TrackRenderer({ track, kind, isLocal }) {
@@ -190,6 +191,8 @@ const VideoCall = ({ interviewId }) => {
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
   const [mediaUnlocked, setMediaUnlocked] = useState(false);
+  const navigate = useNavigate();
+  const [meetingEnded, setMeetingEnded] = useState(false);
 
   // Toast effect
   useEffect(() => {
@@ -475,6 +478,46 @@ const VideoCall = ({ interviewId }) => {
     console.log('[VideoCall][remoteParticipants][state]', remoteParticipants.map(p => p.identity), remoteParticipants);
   }, [remoteParticipants]);
 
+  const handleEndCall = async () => {
+    if (room) {
+      room.disconnect();
+    }
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${import.meta.env.VITE_API_URL}/interviews/${interviewId}/complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    } catch (err) {
+      console.error('Failed to mark interview as completed:', err);
+    }
+    setMeetingEnded(true);
+  };
+
+  if (meetingEnded) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-900">
+        <div className="text-3xl text-white mb-4">Meeting Ended</div>
+        <div className="mb-8 text-gray-400">Thank you for attending the interview.</div>
+        <button
+          className="px-6 py-3 rounded bg-blue-600 text-white hover:bg-blue-700 text-lg"
+          onClick={() => {
+            if (user?.role === 'admin') {
+              navigate('/admin/dashboard');
+            } else {
+              navigate('/dashboard');
+            }
+          }}
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
+
   if (isConnecting) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -534,7 +577,7 @@ const VideoCall = ({ interviewId }) => {
               </svg>
             </button>
             <button
-              onClick={() => room && room.disconnect()}
+              onClick={handleEndCall}
               className="p-2 rounded-full bg-red-600 hover:bg-red-700 text-white"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -610,7 +653,7 @@ const VideoCall = ({ interviewId }) => {
           )}
         </button>
         <button
-          onClick={() => room && room.disconnect()}
+          onClick={handleEndCall}
           className="p-2 rounded-full bg-red-600 hover:bg-red-700 text-white"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
