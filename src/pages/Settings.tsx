@@ -5,7 +5,7 @@ import Layout from '@/components/Layout';
 import ToggleAIMode from '@/components/ToggleAIMode';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Settings as SettingsIcon, Save, Trash2, UserMinus } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Trash2, UserMinus, Archive } from 'lucide-react';
 import { toast } from 'sonner';
 import { interviewAPI, userAPI } from '@/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,6 +14,7 @@ const Settings: React.FC = () => {
   const { user } = useAuth();
   const { interviews, fetchInterviews } = useInterview();
   const [isDeletingInterviews, setIsDeletingInterviews] = useState(false);
+  const [isDeletingCompletedInterviews, setIsDeletingCompletedInterviews] = useState(false);
   const [candidates, setCandidates] = useState<any[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
   const [isDeletingCandidate, setIsDeletingCandidate] = useState(false);
@@ -65,6 +66,34 @@ const Settings: React.FC = () => {
       toast.error('Failed to delete some interviews');
     } finally {
       setIsDeletingInterviews(false);
+    }
+  };
+
+  const handleDeleteAllCompletedInterviews = async () => {
+    if (!confirm('Are you sure you want to delete all completed interviews and their reports? This action cannot be undone.')) {
+      return;
+    }
+
+    setIsDeletingCompletedInterviews(true);
+    try {
+      // Get all completed interviews
+      const completedInterviews = interviews.filter(interview => interview.status === 'completed');
+      
+      // Delete each interview
+      const deletePromises = completedInterviews.map(interview => 
+        interviewAPI.delete(interview.id)
+      );
+      
+      await Promise.all(deletePromises);
+      
+      // Refresh the interviews list
+      await fetchInterviews();
+      toast.success('All completed interviews and reports deleted successfully');
+    } catch (error) {
+      console.error('Error deleting completed interviews:', error);
+      toast.error('Failed to delete some completed interviews');
+    } finally {
+      setIsDeletingCompletedInterviews(false);
     }
   };
 
@@ -139,19 +168,42 @@ const Settings: React.FC = () => {
                 <div className="border rounded-md p-4 mb-6">
                   <h3 className="font-medium mb-2">Interview Management</h3>
                   <p className="text-sm text-gray-500 mb-4">
-                    Manage pending interviews in the system
+                    Manage interviews in the system
                   </p>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDeleteAllPendingInterviews}
-                    disabled={isDeletingInterviews || interviews.filter(i => i.status !== 'completed').length === 0}
-                    className="flex items-center"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {isDeletingInterviews ? 'Deleting...' : 'Delete All Pending Interviews'}
-                  </Button>
+                  <div className="space-y-4">
+                    <div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDeleteAllPendingInterviews}
+                        disabled={isDeletingInterviews || interviews.filter(i => i.status !== 'completed').length === 0}
+                        className="flex items-center"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeletingInterviews ? 'Deleting...' : 'Delete All Pending Interviews'}
+                      </Button>
+                      <p className="text-xs text-gray-500 mt-1">
+                        This will delete all interviews that are not yet completed
+                      </p>
+                    </div>
+                    <div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDeleteAllCompletedInterviews}
+                        disabled={isDeletingCompletedInterviews || interviews.filter(i => i.status === 'completed').length === 0}
+                        className="flex items-center"
+                      >
+                        <Archive className="mr-2 h-4 w-4" />
+                        {isDeletingCompletedInterviews ? 'Deleting...' : 'Delete All Completed Interviews & Reports'}
+                      </Button>
+                      <p className="text-xs text-gray-500 mt-1">
+                        This will permanently delete all completed interviews and their associated reports
+                      </p>
+                    </div>
+                  </div>
                 </div>
+                
                 <div className="border rounded-md p-4">
                   <h3 className="font-medium mb-2">Remove Candidate</h3>
                   <p className="text-sm text-gray-500 mb-4">
