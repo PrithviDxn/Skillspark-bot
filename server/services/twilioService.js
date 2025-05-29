@@ -25,7 +25,9 @@ const createVideoRoom = async (interviewId) => {
         uniqueName: roomName,
         type: 'group',
         maxParticipants: 2,
-        recordParticipantsOnConnect: true
+        recordParticipantsOnConnect: true,
+        statusCallback: 'https://skill-spark-interview-ai-1.onrender.com/api/v1/video/recording-webhook',
+        statusCallbackMethod: 'POST'
       });
       return room.sid;
     } else {
