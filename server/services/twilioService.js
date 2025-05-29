@@ -3,7 +3,7 @@ import twilio from 'twilio';
 const AccessToken = twilio.jwt.AccessToken;
 const VideoGrant = AccessToken.VideoGrant;
 
-const client = twilio(
+  const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN,
   {
@@ -29,6 +29,9 @@ const createVideoRoom = async (interviewId) => {
         statusCallback: 'https://skill-spark-interview-ai-1.onrender.com/api/v1/video/recording-webhook',
         statusCallbackMethod: 'POST'
       });
+      // Save the room SID to the interview
+      const Interview = (await import('../models/Interview.js')).default;
+      await Interview.findByIdAndUpdate(interviewId, { twilioRoomSid: room.sid });
       return room.sid;
     } else {
       // If it's a different error, rethrow

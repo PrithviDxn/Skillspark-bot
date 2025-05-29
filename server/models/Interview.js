@@ -48,6 +48,10 @@ const InterviewSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  twilioRoomSid: {
+    type: String,
+    default: ''
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
