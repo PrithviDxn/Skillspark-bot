@@ -5,6 +5,7 @@ import fs from 'fs';
 
 export const handleTwilioRecordingWebhook = async (req, res) => {
   try {
+    console.log('Twilio webhook req.body:', req.body);
     const { RecordingUrl, RoomSid, StatusCallbackEvent } = req.body;
     if (StatusCallbackEvent !== 'recording-completed') {
       return res.status(200).send('Not a completed recording event');

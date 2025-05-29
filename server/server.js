@@ -109,6 +109,8 @@ if (!fs.existsSync(tempDir)) {
 
 // Parse JSON bodies
 app.use(express.json());
+// Parse URL-encoded bodies (for Twilio webhooks)
+app.use(express.urlencoded({ extended: true }));
 
 // File upload middleware
 app.use(fileUpload({
