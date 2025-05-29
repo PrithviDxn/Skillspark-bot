@@ -119,6 +119,7 @@ const InterviewReport = () => {
   interface ExtendedInterview extends InterviewType {
     candidateName?: string;
     candidateEmail?: string;
+    transcript?: string;
   }
   
   const [interview, setInterview] = useState<ExtendedInterview | null>(null);
@@ -205,7 +206,8 @@ const InterviewReport = () => {
         ...foundInterview,
         // Extract candidate name/email from candidateId if available
         candidateName: foundInterview.candidateId?.split('@')[0] || '',
-        candidateEmail: foundInterview.candidateId || ''
+        candidateEmail: foundInterview.candidateId || '',
+        transcript: foundInterview.transcript || ''
       };
       
       setInterview(extendedInterview);
@@ -698,6 +700,21 @@ const InterviewReport = () => {
                 </Card>
               )}
             </div>
+            
+            {/* Add full meeting transcript display here */}
+            {interview.transcript && interview.transcript.trim() !== '' && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle>Full Meeting Transcript</CardTitle>
+                  <CardDescription>This is the full transcript of the entire interview session, including all participants.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="whitespace-pre-wrap text-gray-800 text-sm max-h-[400px] overflow-y-auto bg-gray-50 p-4 rounded">
+                    {interview.transcript}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             
             <h2 className="text-2xl font-bold mb-4">Questions & Answers</h2>
             

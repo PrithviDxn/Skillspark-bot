@@ -44,6 +44,10 @@ const InterviewSchema = new mongoose.Schema({
     required: [true, 'Please specify interview duration in minutes'],
     default: 30
   },
+  transcript: {
+    type: String,
+    default: ''
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

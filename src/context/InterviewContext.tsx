@@ -55,6 +55,7 @@ export type Interview = {
   scheduledTime: string;
   duration: number;
   answers: Answer[];
+  transcript?: string;
 };
 
 type InterviewContextType = {
