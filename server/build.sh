@@ -11,8 +11,6 @@ source venv/bin/activate
 
 echo "Installing Python dependencies..."
 pip install --upgrade pip
-pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cpu
-pip install numpy scipy sounddevice librosa transformers
 pip install -r requirements.txt
 
 echo "Creating necessary directories..."
