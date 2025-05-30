@@ -9,17 +9,14 @@ from transformers import pipeline, AutoModelForSpeechSeq2Seq, AutoProcessor
 import librosa
 from datetime import datetime
 
-# Set Hugging Face cache directory to D: drive
-os.environ["HF_HOME"] = "D:\\HuggingFaceCache"
-
-# Configuration settings
-OUTPUT_FOLDER = "D:\\WhisperTranscriptions"
+# Use environment variables for paths
+OUTPUT_FOLDER = os.getenv("OUTPUT_FOLDER", "temp")
 SAMPLE_RATE = 16000  # Hz
 RECORD_SECONDS = 5  # Default recording duration
 NOTEPAD_FILE = os.path.join(OUTPUT_FOLDER, "transcriptions.txt")  # Main notepad file
 
 # Debug mode - set to False by default, change to True for troubleshooting
-DEBUG = False
+DEBUG = True  # Enable debug mode for troubleshooting
 
 # Default to a smaller model for better performance
 MODEL_ID = "openai/whisper-base"  # Can also use "openai/whisper-base", "openai/whisper-medium", or "openai/whisper-large-v3-turbo"
