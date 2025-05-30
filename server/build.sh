@@ -2,6 +2,9 @@
 # exit on error
 set -o errexit
 
+# Change to the server directory
+cd "$(dirname "$0")"
+
 echo "Installing Node.js dependencies..."
 npm install
 
