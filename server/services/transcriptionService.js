@@ -6,11 +6,10 @@ export const transcribeAudioFile = (filePath) => {
     // Get the absolute path to the server directory
     const serverDir = path.resolve(process.cwd());
     
-    // Construct the command to activate the virtual environment and run the script
-    // Using . instead of source for sh compatibility, and using the full path to python
-    const command = `cd "${serverDir}" && . venv/bin/activate && "${path.join(serverDir, 'venv/bin/python')}" "${path.join(serverDir, 'whisper_simple_notepad.py')}" --file "${filePath}"`;
+    // Construct the command to run the Python script directly with the virtual environment's Python
+    const command = `"${path.join(serverDir, 'venv/bin/python')}" "${path.join(serverDir, 'whisper_simple_notepad.py')}" --file "${filePath}"`;
     
-    exec(command, { shell: '/bin/bash' }, (error, stdout, stderr) => {
+    exec(command, (error, stdout, stderr) => {
       if (error) {
         console.error('Transcription error:', error);
         console.error('stderr:', stderr);

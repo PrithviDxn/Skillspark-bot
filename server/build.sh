@@ -9,10 +9,14 @@ echo "Installing Node.js dependencies..."
 npm install
 
 echo "Setting up Python environment..."
-python -m venv venv
-source venv/bin/activate
+# Remove existing venv if it exists
+rm -rf venv
 
-echo "Installing Python dependencies..."
+# Create new virtual environment
+python -m venv venv
+
+# Activate virtual environment and install dependencies
+source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
