@@ -24,6 +24,9 @@ echo "Creating necessary directories..."
 mkdir -p temp
 chmod 777 temp
 
+# Copy the Python script to the correct location
+cp whisper_simple_notepad.py /opt/render/project/src/whisper_simple_notepad.py
+
 # Set environment variables for Python
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 export HF_HOME="$(pwd)/.cache/huggingface"

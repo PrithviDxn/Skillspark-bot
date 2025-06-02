@@ -8,7 +8,7 @@ export const transcribeAudioFile = (filePath) => {
     
     // Use the absolute path to the Python executable in the virtual environment
     const pythonPath = '/opt/render/project/src/venv/bin/python';
-    const scriptPath = path.join(serverDir, 'whisper_simple_notepad.py');
+    const scriptPath = path.join(serverDir, 'server', 'whisper_simple_notepad.py');
     
     // Construct the command to run the Python script
     const command = `"${pythonPath}" "${scriptPath}" --file "${filePath}"`;
