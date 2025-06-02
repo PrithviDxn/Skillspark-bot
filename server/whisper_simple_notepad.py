@@ -2,7 +2,7 @@ import os
 import time
 import torch
 import numpy as np
-import sounddevice as sd
+# import sounddevice as sd  # Commented out because PortAudio is not available in the server environment
 from scipy.io.wavfile import write
 from scipy import signal
 from transformers import pipeline, AutoModelForSpeechSeq2Seq, AutoProcessor
