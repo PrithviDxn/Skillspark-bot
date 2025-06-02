@@ -10,13 +10,13 @@ npm install
 
 echo "Setting up Python environment..."
 # Remove existing venv if it exists
-rm -rf venv
+rm -rf /opt/render/project/src/venv
 
-# Create new virtual environment
-python -m venv venv
+# Create new virtual environment in the correct location
+python -m venv /opt/render/project/src/venv
 
 # Activate virtual environment and install dependencies
-source venv/bin/activate
+source /opt/render/project/src/venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
