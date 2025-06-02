@@ -1,7 +1,12 @@
 import axios from 'axios';
-import { transcribeAudioFile } from '../services/transcriptionService.js';
-import Interview from '../models/Interview.js';
+import { Worker } from 'worker_threads';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import fs from 'fs';
+import Interview from '../models/Interview.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const handleTwilioRecordingWebhook = async (req, res) => {
   try {
@@ -26,7 +31,7 @@ export const handleTwilioRecordingWebhook = async (req, res) => {
 
     // Construct the full Twilio API URL
     const audioUrl = `https://video.twilio.com${MediaUri}`;
-    console.log('Fetching audio from:', audioUrl);                                                                          
+    console.log('Fetching audio from:', audioUrl);
 
     // Download the audio file
     const audioResponse = await axios.get(audioUrl, { 
@@ -41,20 +46,45 @@ export const handleTwilioRecordingWebhook = async (req, res) => {
     const tempFilePath = `/tmp/${RoomSid}.wav`;
     fs.writeFileSync(tempFilePath, audioBuffer);
 
-    // Transcribe the audio
-    const transcript = await transcribeAudioFile(tempFilePath);
+    // Log the RoomSid and check if the Interview exists
+    console.log('RoomSid from webhook:', RoomSid);
+    const interview = await Interview.findOne({ twilioRoomSid: RoomSid });
+    console.log('Interview found for RoomSid:', interview ? interview._id : 'NOT FOUND');
 
-    // Update the interview with the transcript
-    await Interview.findOneAndUpdate(
-      { twilioRoomSid: RoomSid },
-      { $set: { transcript } }
-    );
-    console.log('Transcript saved for RoomSid:', RoomSid, 'Transcript:', transcript);
+    if (!interview) {
+      console.error('No interview found for RoomSid:', RoomSid);
+      return res.status(404).send('Interview not found');
+    }
 
-    // Clean up the temporary file
-    fs.unlinkSync(tempFilePath);
+    // Start transcription in a worker thread
+    const worker = new Worker(path.join(__dirname, '../workers/transcriptionWorker.js'));
+    worker.postMessage({ tempFilePath, RoomSid });
 
-    res.status(200).send('Recording processed successfully');
+    worker.on('message', async (result) => {
+      if (result.success) {
+        console.log('Transcription completed successfully for RoomSid:', RoomSid);
+        console.log('Transcript:', result.transcript);
+        
+        // Update the interview with the transcript
+        const updatedInterview = await Interview.findOneAndUpdate(
+          { twilioRoomSid: RoomSid },
+          { $set: { transcript: result.transcript } },
+          { new: true }
+        );
+        console.log('Updated interview after saving transcript:', updatedInterview ? updatedInterview._id : 'NOT FOUND');
+      } else {
+        console.error('Transcription failed for RoomSid:', RoomSid, 'Error:', result.error);
+      }
+      worker.terminate();
+    });
+
+    worker.on('error', (error) => {
+      console.error('Worker error for RoomSid:', RoomSid, error);
+      worker.terminate();
+    });
+
+    // Respond immediately
+    res.status(200).send('Recording processing started');
   } catch (err) {
     console.error('Error in Twilio recording webhook:', err);
     res.status(500).send('Error processing recording');

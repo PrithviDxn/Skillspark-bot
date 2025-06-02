@@ -2,17 +2,16 @@ import os
 import time
 import torch
 import numpy as np
-# import sounddevice as sd  # Commented out because PortAudio is not available in the server environment
 from scipy.io.wavfile import write
 from scipy import signal
 from transformers import pipeline, AutoModelForSpeechSeq2Seq, AutoProcessor
 import librosa
 from datetime import datetime
+import argparse
 
 # Use environment variables for paths
 OUTPUT_FOLDER = os.getenv("OUTPUT_FOLDER", "temp")
 SAMPLE_RATE = 16000  # Hz
-RECORD_SECONDS = 5  # Default recording duration
 NOTEPAD_FILE = os.path.join(OUTPUT_FOLDER, "transcriptions.txt")  # Main notepad file
 
 # Debug mode - set to False by default, change to True for troubleshooting
@@ -33,38 +32,6 @@ def debug_print(message):
     """Print debug messages if DEBUG is enabled"""
     if DEBUG:
         print(f"[DEBUG] {message}")
-
-def list_audio_devices():
-    """List all available audio devices"""
-    print("\n=== Available Audio Devices ===")
-    try:
-        devices = sd.query_devices()
-        for i, device in enumerate(devices):
-            try:
-                # Just convert the device to string for display
-                print(f"{i}: {device}")
-            except:
-                print(f"{i}: Device info unavailable")
-        
-        try:
-            default_input = sd.query_devices(kind='input')
-            print(f"\nDefault input device: {default_input}")
-        except Exception as e:
-            print(f"\nError getting default input device: {str(e)}")
-        
-        return devices
-    except Exception as e:
-        print(f"ERROR listing audio devices: {str(e)}")
-        return []
-
-def auto_detect_devices():
-    """Auto-detect available input devices"""
-    devices = sd.query_devices()
-    input_devices = []
-    for i, device in enumerate(devices):
-        if device['max_input_channels'] > 0:
-            input_devices.append(i)
-    return input_devices
 
 def reduce_noise(audio_data):
     """Apply simple noise reduction to audio data"""
@@ -150,85 +117,6 @@ def remove_silence(audio_data):
     except Exception as e:
         debug_print(f"Error removing silence: {str(e)}")
         return audio_data
-
-def record_audio(duration, device=None):
-    """Record audio from microphone"""
-    print(f"Recording {duration} seconds of audio...")
-    debug_print(f"Using device: {device}")
-    
-    try:
-        # Record audio - ensure duration is correctly handled
-        samples = int(duration * SAMPLE_RATE)
-        debug_print(f"Recording {samples} samples at {SAMPLE_RATE}Hz")
-        
-        recording = sd.rec(
-            samples,
-            samplerate=SAMPLE_RATE,
-            channels=1,
-            dtype='float32',
-            device=device
-        )
-        
-        # Wait for recording to complete
-        sd.wait()
-        print("Recording finished!")
-        
-        # Check if recording contains data
-        if recording.size == 0:
-            print("WARNING: Empty recording detected!")
-            return None
-            
-        debug_print(f"Recording shape: {recording.shape}, dtype: {recording.dtype}")
-        
-        # Check audio levels
-        max_val = np.max(np.abs(recording))
-        debug_print(f"Max audio level: {max_val}")
-        
-        if max_val < 0.01:
-            print("WARNING: Audio is very quiet. Make sure your microphone is working and not muted.")
-            # Still continue with normalization to try to amplify the signal
-        
-        # Normalize audio to prevent quiet recordings
-        if max_val > 0:
-            normalized = recording / max_val * 0.9  # Normalize to 90% of max amplitude
-            debug_print(f"Normalized audio: max amplitude before={max_val}, after={np.max(np.abs(normalized))}")
-            
-            # Apply noise reduction and silence removal
-            enhanced_audio = normalized.flatten()
-            if APPLY_NOISE_REDUCTION:
-                enhanced_audio = reduce_noise(enhanced_audio)
-            if REMOVE_SILENCE:
-                enhanced_audio = remove_silence(enhanced_audio)
-                
-            return enhanced_audio
-            
-        return recording.flatten()
-    
-    except Exception as e:
-        print(f"ERROR during recording: {str(e)}")
-        return None
-
-def save_audio(audio, filename):
-    """Save audio to WAV file"""
-    try:
-        # Normalize audio data to int16 range
-        audio_int16 = (audio * 32767).astype(np.int16)
-        
-        # Save as WAV file
-        write(filename, SAMPLE_RATE, audio_int16)
-        print(f"Audio saved to {filename}")
-        debug_print(f"Audio saved with shape: {audio_int16.shape}, dtype: {audio_int16.dtype}")
-        
-        # Verify the file was written correctly
-        if os.path.exists(filename) and os.path.getsize(filename) > 0:
-            debug_print(f"File verified: {filename}, size: {os.path.getsize(filename)} bytes")
-            return True
-        else:
-            print(f"WARNING: File verification failed for {filename}")
-            return False
-    except Exception as e:
-        print(f"ERROR saving audio: {str(e)}")
-        return False
 
 def load_whisper_model(model_id=None):
     """Load the Whisper model"""
@@ -395,61 +283,17 @@ def transcribe_audio(audio_file, whisper_pipeline, language="en"):
         traceback.print_exc()
         return ""
 
-def append_to_notepad(text, timestamp):
-    """Append transcription to notepad file with timestamp"""
-    try:
-        # Format the content with timestamp
-        content = f"[{timestamp}] {text}\n\n"
-        
-        # Append to notepad file
-        with open(NOTEPAD_FILE, "a", encoding="utf-8") as f:
-            f.write(content)
-        
-        print(f"Transcription saved to {NOTEPAD_FILE}")
-        return True
-    except Exception as e:
-        print(f"ERROR saving to notepad: {str(e)}")
-        return False
-
-def record_meeting(devices, pipe):
-    """Record from multiple sources and transcribe each clip"""
-    print("Meeting recording started. Press Ctrl+C to stop.")
-    try:
-        while True:
-            for i, device in enumerate(devices):
-                print(f"\nRecording from device {i}...")
-                audio = record_audio(RECORD_SECONDS, device)
-                if audio is not None:
-                    filename = os.path.join(OUTPUT_FOLDER, f"device_{i}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav")
-                    if save_audio(audio, filename):
-                        transcription = transcribe_audio(filename, pipe)
-                        if transcription:
-                            append_to_notepad(f"Device {i}: {transcription}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    except KeyboardInterrupt:
-        print("\nMeeting recording stopped by user.")
-
 def main():
+    parser = argparse.ArgumentParser(description='Transcribe audio file using Whisper')
+    parser.add_argument('--file', required=True, help='Path to the audio file to transcribe')
+    args = parser.parse_args()
+
     print("==== Whisper Voice-to-Text ====")
-    print(f"All transcriptions will be saved to: {NOTEPAD_FILE}")
     print(f"Using model: {MODEL_ID}")
     if APPLY_NOISE_REDUCTION:
         print("Noise reduction: ENABLED")
     if REMOVE_SILENCE:
         print("Silence removal: ENABLED")
-    
-    # Create notepad file if it doesn't exist
-    if not os.path.exists(NOTEPAD_FILE):
-        debug_print(f"Creating new notepad file at {NOTEPAD_FILE}")
-        with open(NOTEPAD_FILE, "w", encoding="utf-8") as f:
-            f.write(f"=== WHISPER TRANSCRIPTIONS ===\nStarted on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\nModel: {MODEL_ID}\n\n")
-    
-    # Auto-detect available input devices
-    devices = auto_detect_devices()
-    if not devices:
-        print("No input devices found. Please check your microphone and try again.")
-        return
-    
-    print(f"Detected {len(devices)} input devices.")
     
     # Load the Whisper model
     pipe = load_whisper_model()
@@ -457,8 +301,13 @@ def main():
         print("Failed to load Whisper model. Exiting.")
         return
     
-    # Start recording meeting
-    record_meeting(devices, pipe)
+    # Transcribe the audio file
+    transcription = transcribe_audio(args.file, pipe)
+    if transcription:
+        print("\nTranscription:")
+        print(transcription)
+    else:
+        print("Failed to transcribe audio file.")
 
 if __name__ == "__main__":
     main() 

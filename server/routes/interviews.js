@@ -251,9 +251,14 @@ router.post('/:id/join', async (req, res) => {
     if (now > timeWindowEnd) {
       return res.status(410).json({ success: false, error: 'Interview time window has expired.' });
     }
+
+    // Create Twilio room if it doesn't exist
+    const { createVideoRoom } = await import('../services/twilioService.js');
+    const roomSid = await createVideoRoom(interviewId);
     
-    // Update interview status to in-progress
+    // Update interview status to in-progress and set twilioRoomSid
     interview.status = 'in-progress';
+    interview.twilioRoomSid = roomSid;
     await interview.save();
     console.log(`[JOIN ENDPOINT] Interview ${interview._id} status after save:`, interview.status);
     
