@@ -45,6 +45,7 @@ export type Answer = {
 export type Interview = {
   id: string;
   candidateId: string;
+  candidateName?: string;
   roleId?: string; // New field for role
   stackId?: string; // Now optional since we can have multiple tech stacks
   techStackIds?: string[]; // New field for multiple tech stacks
@@ -851,6 +852,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const formattedInterview: Interview = {
         id: apiInterview._id, // Use only _id from API
         candidateId: typeof apiInterview.candidate === 'object' ? apiInterview.candidate._id : apiInterview.candidate as string,
+        candidateName: typeof apiInterview.candidate === 'object' ? apiInterview.candidate.name : undefined,
         stackId: singleStackId, // Keep for backward compatibility
         techStackIds: techStackIds, // Add the array of tech stack IDs
         roleId: roleId, // Add role ID if present

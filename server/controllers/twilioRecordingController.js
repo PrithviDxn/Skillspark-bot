@@ -26,7 +26,7 @@ export const handleTwilioRecordingWebhook = async (req, res) => {
 
     // Construct the full Twilio API URL
     const audioUrl = `https://video.twilio.com${MediaUri}`;
-    console.log('Fetching audio from:', audioUrl);
+    console.log('Fetching audio from:', audioUrl);                                                                          
 
     // Download the audio file
     const audioResponse = await axios.get(audioUrl, { 
@@ -49,6 +49,7 @@ export const handleTwilioRecordingWebhook = async (req, res) => {
       { twilioRoomSid: RoomSid },
       { $set: { transcript } }
     );
+    console.log('Transcript saved for RoomSid:', RoomSid, 'Transcript:', transcript);
 
     // Clean up the temporary file
     fs.unlinkSync(tempFilePath);

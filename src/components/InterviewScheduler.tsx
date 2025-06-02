@@ -78,7 +78,9 @@ const InterviewScheduler = () => {
   const fetchCandidates = async () => {
     try {
       const res = await userAPI.getAll();
-      setCandidates(res.data.data || []);
+      // Only include users with role 'user'
+      const filtered = (res.data.data || []).filter((u: any) => u.role === 'user');
+      setCandidates(filtered);
     } catch (error) {
       console.error('Error fetching candidates:', error);
       toast.error('Failed to fetch candidates');

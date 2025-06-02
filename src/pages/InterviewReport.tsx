@@ -373,12 +373,14 @@ const InterviewReport = () => {
   useEffect(() => {
     const loadData = async () => {
       if (reportId) {
+        // Always refresh interview to get the latest transcript
+        await refreshInterview(reportId);
         await fetchInterviewData();
       }
     };
     
     loadData();
-  }, [reportId, fetchInterviewData]);
+  }, [reportId, fetchInterviewData, refreshInterview]);
 
   // Function to fetch audio URL directly from the database
   const fetchAnswerAudio = async (answerId: string) => {
