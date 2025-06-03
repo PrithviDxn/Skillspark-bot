@@ -64,7 +64,10 @@ export default defineConfig(({ mode }) => ({
         'lucide-react',
         'sonner',
         '@monaco-editor/react',
-        'monaco-editor'
+        'monaco-editor',
+        'react-day-picker',
+        'dayjs',
+        'date-fns-tz'
       ],
     },
   },
@@ -107,7 +110,10 @@ export default defineConfig(({ mode }) => ({
       'lucide-react',
       'sonner',
       '@monaco-editor/react',
-      'monaco-editor'
+      'monaco-editor',
+      'react-day-picker',
+      'dayjs',
+      'date-fns-tz'
     ],
     exclude: ['monaco-editor']
   },
