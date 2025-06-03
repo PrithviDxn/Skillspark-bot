@@ -7,7 +7,7 @@ import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Calendar, Clock, User, Building, Code } from 'lucide-react';
-import { format } from 'date-fns/format';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
 import SendInvitationButton from '@/components/SendInvitationButton';
 
