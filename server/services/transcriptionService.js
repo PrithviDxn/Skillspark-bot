@@ -1,28 +1,20 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import path from 'path';
 
-export const transcribeAudioFile = (filePath) => {
+/**
+ * Transcribe audio file using Faster-Whisper (Python)
+ * @param {string} audioFilePath - Path to the audio file
+ * @returns {Promise<string>} - Transcribed text
+ */
+export function transcribeAudio(audioFilePath) {
   return new Promise((resolve, reject) => {
-    // Get the absolute path to the server directory
-    const serverDir = path.resolve(process.cwd());
-    
-    // Use the absolute path to the Python executable in the virtual environment
-    const pythonPath = '/opt/render/project/src/venv/bin/python';
-    const scriptPath = path.join(serverDir, 'whisper_simple_notepad.py');
-    
-    // Construct the command to run the Python script
-    const command = `"${pythonPath}" "${scriptPath}" --file "${filePath}"`;
-    
-    console.log('Running transcription command:', command);
-    
-    exec(command, (error, stdout, stderr) => {
+    const scriptPath = path.resolve('transcribe_faster_whisper.py');
+    execFile('python', [scriptPath, audioFilePath], (error, stdout, stderr) => {
       if (error) {
-        console.error('Transcription error:', error);
-        console.error('stderr:', stderr);
+        console.error('Faster-Whisper error:', error, stderr);
         return reject(stderr || error.message);
       }
-      console.log('Transcription stdout:', stdout);
       resolve(stdout.trim());
     });
   });
-}; 
+} 
