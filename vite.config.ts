@@ -26,7 +26,10 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     rollupOptions: {
-      external: ['date-fns'],
+      external: ['date-fns', 'next-themes'],
     },
+  },
+  optimizeDeps: {
+    include: ['date-fns', 'next-themes'],
   },
 }));
