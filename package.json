@@ -44,7 +44,8 @@
     "tailwindcss-animate": "^1.0.7",
     "twilio": "^5.6.1",
     "twilio-video": "^2.31.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "date-fns": "^3.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.5.5",
