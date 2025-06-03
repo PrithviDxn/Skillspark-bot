@@ -62,7 +62,9 @@ export default defineConfig(({ mode }) => ({
         'clsx',
         'tailwind-merge',
         'lucide-react',
-        'sonner'
+        'sonner',
+        '@monaco-editor/react',
+        'monaco-editor'
       ],
     },
   },
@@ -103,7 +105,13 @@ export default defineConfig(({ mode }) => ({
       'clsx',
       'tailwind-merge',
       'lucide-react',
-      'sonner'
+      'sonner',
+      '@monaco-editor/react',
+      'monaco-editor'
     ],
+    exclude: ['monaco-editor']
+  },
+  define: {
+    'process.env.NODE_DEBUG': false,
   },
 }));
