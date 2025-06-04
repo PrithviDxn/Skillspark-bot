@@ -30,8 +30,13 @@ export async function transcribeAudio(audioFilePath, roomSid) {
       console.log('Script path:', scriptPath);
       console.log('Audio file path:', audioFilePath);
 
-      // Run the Python script
-      const pythonProcess = spawn('python', [
+      // Get the path to the virtual environment's Python
+      const venvPython = process.platform === 'win32' 
+        ? path.join(__dirname, '..', 'venv', 'Scripts', 'python.exe')
+        : path.join(__dirname, '..', 'venv', 'bin', 'python');
+
+      // Run the Python script using the virtual environment's Python
+      const pythonProcess = spawn(venvPython, [
         scriptPath,
         audioFilePath
       ]);
