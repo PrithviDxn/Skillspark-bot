@@ -10,6 +10,16 @@ import { roleAPI, techStackAPI } from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { X, Plus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose
+} from '@/components/ui/dialog';
 
 type RoleFormData = {
   name: string;
@@ -34,6 +44,7 @@ const RoleManager = () => {
   const [techStacks, setTechStacks] = useState<TechStack[]>([]);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
   const form = useForm<RoleFormData>({
     defaultValues: {
@@ -117,6 +128,7 @@ const RoleManager = () => {
     setSelectedRole(role);
     form.setValue('name', role.name);
     form.setValue('description', role.description);
+    setIsEditModalOpen(true);
   };
 
   const handleDelete = async (roleId: string) => {
@@ -138,6 +150,7 @@ const RoleManager = () => {
   const handleCancel = () => {
     setSelectedRole(null);
     form.reset();
+    setIsEditModalOpen(false);
   };
 
   const handleAddTechStack = async (roleId: string, techStackId: string) => {
@@ -170,12 +183,11 @@ const RoleManager = () => {
 
   return (
     <div className="space-y-8">
+      {/* Add New Role Form */}
       <Card>
         <CardHeader>
-          <CardTitle>{selectedRole ? 'Edit Role' : 'Add New Role'}</CardTitle>
-          <CardDescription>
-            {selectedRole ? 'Update role details' : 'Create a new role for candidates'}
-          </CardDescription>
+          <CardTitle>Add New Role</CardTitle>
+          <CardDescription>Create a new role for candidates</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -192,7 +204,6 @@ const RoleManager = () => {
                   </FormItem>
                 )}
               />
-              
               <FormField
                 control={form.control}
                 name="description"
@@ -200,35 +211,60 @@ const RoleManager = () => {
                   <FormItem>
                     <FormLabel>Description</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Describe the role and responsibilities" 
-                        {...field} 
-                      />
+                      <Textarea placeholder="Describe the role and responsibilities" {...field} />
                     </FormControl>
                   </FormItem>
                 )}
               />
-              
-              <div className="flex justify-end space-x-2">
-                {selectedRole && (
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={handleCancel}
-                    disabled={isLoading}
-                  >
-                    Cancel
-                  </Button>
-                )}
-                <Button type="submit" disabled={isLoading}>
-                  {selectedRole ? 'Update Role' : 'Create Role'}
-                </Button>
+              <div className="flex justify-end">
+                <Button type="submit" disabled={isLoading}>Create Role</Button>
               </div>
             </form>
           </Form>
         </CardContent>
       </Card>
-
+      {/* Edit Role Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Role</DialogTitle>
+            <DialogDescription>Update role details</DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Role Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Frontend Developer" {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Describe the role and responsibilities" {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={handleCancel} disabled={isLoading}>Cancel</Button>
+                <Button type="submit" disabled={isLoading}>Update Role</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      {/* Manage Roles List */}
       <Card>
         <CardHeader>
           <CardTitle>Manage Roles</CardTitle>
@@ -247,33 +283,17 @@ const RoleManager = () => {
                       <p className="text-sm text-muted-foreground">{role.description}</p>
                     </div>
                     <div className="flex space-x-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleEdit(role)}
-                      >
-                        Edit
-                      </Button>
-                      <Button 
-                        variant="destructive" 
-                        size="sm" 
-                        onClick={() => handleDelete(role.id)}
-                      >
-                        Delete
-                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(role)}>Edit</Button>
+                      <Button variant="destructive" size="sm" onClick={() => handleDelete(role.id)}>Delete</Button>
                     </div>
                   </div>
-                  
                   <div className="mt-4">
                     <h4 className="text-sm font-medium mb-2">Tech Stacks</h4>
                     <div className="flex flex-wrap gap-2 mb-3">
                       {role.techStacks.map(stack => (
                         <Badge key={stack.id} variant="secondary" className="flex items-center gap-1">
                           {stack.name}
-                          <button
-                            className="ml-1 rounded-full hover:bg-muted p-0.5"
-                            onClick={() => handleRemoveTechStack(role.id, stack.id)}
-                          >
+                          <button className="ml-1 rounded-full hover:bg-muted p-0.5" onClick={() => handleRemoveTechStack(role.id, stack.id)}>
                             <X className="h-3 w-3" />
                           </button>
                         </Badge>
@@ -282,31 +302,18 @@ const RoleManager = () => {
                         <span className="text-sm text-muted-foreground">No tech stacks assigned</span>
                       )}
                     </div>
-                    
                     <div className="flex items-center gap-2">
-                      <Select
-                        onValueChange={(value) => handleAddTechStack(role.id, value)}
-                      >
+                      <Select onValueChange={(value) => handleAddTechStack(role.id, value)}>
                         <SelectTrigger className="w-[200px]">
                           <SelectValue placeholder="Add tech stack" />
                         </SelectTrigger>
                         <SelectContent>
-                          {techStacks
-                            .filter(stack => !role.techStacks.some(s => s.id === stack.id))
-                            .map(stack => (
-                              <SelectItem key={stack.id} value={stack.id}>
-                                {stack.name}
-                              </SelectItem>
-                            ))}
+                          {techStacks.filter(stack => !role.techStacks.some(s => s.id === stack.id)).map(stack => (
+                          <SelectItem key={stack.id} value={stack.id}>{stack.name}</SelectItem>
+                        ))}
                         </SelectContent>
                       </Select>
-                      <Button 
-                        type="button" 
-                        size="sm" 
-                        variant="outline"
-                        className="flex items-center gap-1"
-                        disabled={techStacks.length === role.techStacks.length}
-                      >
+                      <Button type="button" size="sm" variant="outline" className="flex items-center gap-1" disabled={techStacks.length === role.techStacks.length}>
                         <Plus className="h-4 w-4" /> Add
                       </Button>
                     </div>
