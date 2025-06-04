@@ -9,7 +9,7 @@ import path from 'path';
 export function transcribeAudio(audioFilePath) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.resolve('transcribe_faster_whisper.py');
-    execFile('python', [scriptPath, audioFilePath], (error, stdout, stderr) => {
+    execFile('/opt/render/project/src/venv/bin/python', [scriptPath, audioFilePath], (error, stdout, stderr) => {
       if (error) {
         console.error('Faster-Whisper error:', error, stderr);
         return reject(stderr || error.message);

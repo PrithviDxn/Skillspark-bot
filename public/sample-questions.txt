@@ -1,0 +1,7 @@
+Q: What is React?
+A: A JavaScript library for building UIs.
+Category: Frontend
+
+Q: What is Python?
+A: A high-level programming language.
+Category: Backend 
