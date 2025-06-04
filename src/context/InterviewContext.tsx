@@ -181,6 +181,13 @@ interface ApiAnswer {
   }
 }
 
+// Add this interface for API candidate data
+interface ApiCandidate {
+  _id: string;
+  name?: string;
+  email?: string;
+}
+
 // Helper to always return a string id
 function safeId(val: any): string {
   if (!val) return '';
@@ -852,7 +859,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const formattedInterview: Interview = {
         id: apiInterview._id, // Use only _id from API
         candidateId: typeof apiInterview.candidate === 'object' ? apiInterview.candidate._id : apiInterview.candidate as string,
-        candidateName: typeof apiInterview.candidate === 'object' ? apiInterview.candidate.name : undefined,
+        candidateName: typeof apiInterview.candidate === 'object' ? (apiInterview.candidate as ApiCandidate).name : undefined,
         stackId: singleStackId, // Keep for backward compatibility
         techStackIds: techStackIds, // Add the array of tech stack IDs
         roleId: roleId, // Add role ID if present
@@ -891,6 +898,11 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         console.error(`Error fetching answers for interview ${interviewId}:`, error);
       }
       
+      // Check if there are any changes before updating state
+      const currentInterview = interviews.find(i => i.id === interviewId);
+      const hasChanges = !currentInterview || 
+        JSON.stringify(currentInterview) !== JSON.stringify(formattedInterview);
+      
       // Update the interviews state
       setInterviews(prev => {
         const updated = prev.map(i => i.id === interviewId ? formattedInterview : i);
@@ -908,7 +920,11 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setCurrentInterview(formattedInterview);
       }
       
-      toast.success('Interview data refreshed');
+      // Only show success toast if there were changes
+      if (hasChanges) {
+        toast.success('Interview data refreshed');
+      }
+      
       return formattedInterview;
     } catch (error) {
       console.error('Error refreshing interview:', error);

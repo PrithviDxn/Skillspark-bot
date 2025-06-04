@@ -373,8 +373,11 @@ const InterviewReport = () => {
   useEffect(() => {
     const loadData = async () => {
       if (reportId) {
-        // Always refresh interview to get the latest transcript
-        await refreshInterview(reportId);
+        // Only refresh interview if it's not already loaded
+        const currentInterview = interviews.find(i => i.id === reportId);
+        if (!currentInterview) {
+          await refreshInterview(reportId);
+        }
         await fetchInterviewData();
       }
     };
