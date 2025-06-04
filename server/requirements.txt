@@ -6,7 +6,7 @@ scipy>=1.15.3
 librosa>=0.11.0
 transformers>=4.52.3
 huggingface-hub>=0.32.2
-tokenizers>=0.21.1
+tokenizers==0.15.2
 safetensors>=0.5.3
 tqdm>=4.67.1
 fsspec>=2023.5.0
