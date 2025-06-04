@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: skillspark-server
+    env: node
+    buildCommand: cd server && npm install && npm run setup
+    startCommand: cd server && node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.10.0 
