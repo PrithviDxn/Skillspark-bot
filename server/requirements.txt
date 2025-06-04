@@ -26,4 +26,5 @@ llvmlite>=0.44.0
 packaging>=25.0
 pyyaml>=6.0.2
 regex>=2024.11.6
-threadpoolctl>=3.6.0 
+threadpoolctl>=3.6.0
+faster-whisper==0.10.0 
