@@ -1,11 +1,19 @@
 import OpenAI from 'openai';
 import twilio from 'twilio';
-import { createCanvas } from 'canvas';
 import { Readable } from 'stream';
 import interviewReportService from './interviewReportService.js';
 import audioProcessingService from './audioProcessingService.js';
 import interactionService from './interactionService.js';
 import evaluationService from './evaluationService.js';
+
+// Try to import canvas, but don't fail if it's not available
+let canvas;
+try {
+  const canvasModule = await import('canvas');
+  canvas = canvasModule;
+} catch (error) {
+  console.warn('Canvas module not available. Avatar generation will be disabled.');
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -27,6 +35,7 @@ class AIInterviewer {
     this.room = null;
     this.avatarCanvas = null;
     this.avatarStream = null;
+    this.hasCanvas = !!canvas;
     
     // Metrics tracking
     this.startTime = null;
@@ -75,22 +84,32 @@ class AIInterviewer {
   }
 
   async initializeAvatar() {
-    // Create canvas for avatar
-    this.avatarCanvas = createCanvas(640, 480);
-    const ctx = this.avatarCanvas.getContext('2d');
+    if (!this.hasCanvas) {
+      console.log('Avatar generation disabled - canvas not available');
+      return;
+    }
 
-    // Draw base avatar (a simple animated face)
-    this.drawAvatar(ctx);
+    try {
+      // Create canvas for avatar
+      this.avatarCanvas = canvas.createCanvas(640, 480);
+      const ctx = this.avatarCanvas.getContext('2d');
 
-    // Create a readable stream from the canvas
-    this.avatarStream = new Readable({
-      read() {
-        // This will be called when the stream needs more data
-      }
-    });
+      // Draw base avatar (a simple animated face)
+      this.drawAvatar(ctx);
 
-    // Start animation loop
-    this.startAvatarAnimation();
+      // Create a readable stream from the canvas
+      this.avatarStream = new Readable({
+        read() {
+          // This will be called when the stream needs more data
+        }
+      });
+
+      // Start animation loop
+      this.startAvatarAnimation();
+    } catch (error) {
+      console.error('Error initializing avatar:', error);
+      this.hasCanvas = false;
+    }
   }
 
   drawAvatar(ctx) {

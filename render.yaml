@@ -28,4 +28,12 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_DOMAIN
-        value: skillspark.ai 
+        value: skillspark.ai
+    buildFilter:
+      paths:
+        - server/**
+        - package.json
+        - package-lock.json
+    healthCheckPath: /api/health
+    autoDeploy: true
+    plan: standard 
