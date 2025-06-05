@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
-import { CohereClient } from 'cohere-ai';
+import pkg from 'cohere-ai';
 import ErrorResponse from '../utils/errorResponse.js';
+
+const { CohereClient } = pkg;
 
 // Initialize OpenAI client
 const openai = new OpenAI({

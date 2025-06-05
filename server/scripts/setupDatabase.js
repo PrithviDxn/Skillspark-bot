@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import bcrypt from 'bcryptjs';
+import pkg from 'bcryptjs';
+const bcrypt = pkg;
 import { fileURLToPath } from 'url';
 import path from 'path';
 

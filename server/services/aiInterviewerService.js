@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
-import twilio from 'twilio';
+import pkg from 'twilio';
+const twilio = pkg;
 import { Readable } from 'stream';
 import interviewReportService from './interviewReportService.js';
 import audioProcessingService from './audioProcessingService.js';

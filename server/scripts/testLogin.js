@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import bcrypt from 'bcryptjs';
+import pkg from 'bcryptjs';
+const bcrypt = pkg;
 import User from '../models/User.js';
 
 // Load env vars
