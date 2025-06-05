@@ -45,7 +45,10 @@ async function installRequirements() {
     
     // Verify installation
     console.log('Verifying faster-whisper installation...');
-    await runCommand('python3', ['-c', "import faster_whisper; print('faster-whisper installed successfully')"], { cwd: rootDir });
+    const verifyScript = path.join(rootDir, 'verify_install.py');
+    fs.writeFileSync(verifyScript, 'import faster_whisper\nprint("faster-whisper installed successfully")');
+    await runCommand('python3', [verifyScript], { cwd: rootDir });
+    fs.unlinkSync(verifyScript); // Clean up the temporary file
     
     console.log('Python requirements installed successfully');
   } catch (error) {

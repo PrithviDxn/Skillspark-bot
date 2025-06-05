@@ -12,7 +12,10 @@ pip3 install --upgrade pip
 pip3 install -r requirements.txt
 
 # Verify installation
-python3 -c "import faster_whisper; print('faster-whisper installed successfully')"
+echo 'import faster_whisper
+print("faster-whisper installed successfully")' > verify_install.py
+python3 verify_install.py
+rm verify_install.py
 
 # Create required directories
 mkdir -p uploads tmp
