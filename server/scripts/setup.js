@@ -35,8 +35,18 @@ function runCommand(command, args, options = {}) {
 async function installRequirements() {
   try {
     console.log('Installing Python requirements...');
+    
+    // First upgrade pip
     const pipCmd = isProduction ? 'pip3' : 'pip';
+    await runCommand(pipCmd, ['install', '--upgrade', 'pip'], { cwd: rootDir });
+    
+    // Install requirements
     await runCommand(pipCmd, ['install', '-r', 'requirements.txt'], { cwd: rootDir });
+    
+    // Verify installation
+    console.log('Verifying faster-whisper installation...');
+    await runCommand('python3', ['-c', 'import faster_whisper; print("faster-whisper installed successfully")'], { cwd: rootDir });
+    
     console.log('Python requirements installed successfully');
   } catch (error) {
     console.error('Failed to install Python requirements:', error);

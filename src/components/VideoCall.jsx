@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Video, connect } from 'twilio-video';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import AIInterviewerControls from './AIInterviewerControls';
 
 // TrackRenderer component for robust track attachment
 function TrackRenderer({ track, kind, isLocal }) {
@@ -593,8 +594,20 @@ const VideoCall = ({ interviewId }) => {
 
   console.log('[VideoCall][render] videoContainers:', videoContainers);
 
+  const renderAdminControls = () => {
+    if (user?.role === 'admin') {
+      return (
+        <div className="absolute top-4 left-4 z-50">
+          <AIInterviewerControls interviewId={interviewId} />
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
+      {renderAdminControls()}
       {/* Unlock media button for candidate if remote tracks exist */}
       {user?.role !== 'admin' && videoContainers.some(vc => !vc.isLocal) && !mediaUnlocked && (
         <div className="absolute top-4 right-4 z-50">
