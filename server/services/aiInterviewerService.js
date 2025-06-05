@@ -6,6 +6,8 @@ import interviewReportService from './interviewReportService.js';
 import audioProcessingService from './audioProcessingService.js';
 import interactionService from './interactionService.js';
 import evaluationService from './evaluationService.js';
+import Question from '../models/Question.js';
+import TechStack from '../models/TechStack.js';
 
 // Try to import canvas, but don't fail if it's not available
 let canvas;
@@ -47,28 +49,8 @@ class AIInterviewer {
 
   async initialize() {
     try {
-      // Generate initial questions based on domain
-      const prompt = `Generate 5 technical interview questions for ${this.domain}. 
-      ${this.customInstructions ? `Additional context: ${this.customInstructions}` : ''}
-      Format the response as a JSON array of questions.`;
-
-      const completion = await openai.chat.completions.create({
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert technical interviewer. Generate relevant and challenging questions."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        model: "gpt-4-turbo-preview",
-        response_format: { type: "json_object" }
-      });
-
-      const response = JSON.parse(completion.choices[0].message.content);
-      this.questions = response.questions;
+      // Initialize questions
+      await this.initializeQuestions(this.domain);
 
       // Initialize avatar
       await this.initializeAvatar();
@@ -82,6 +64,17 @@ class AIInterviewer {
       console.error('Error initializing AI interviewer:', error);
       throw error;
     }
+  }
+
+  async initializeQuestions(domain) {
+    // Find the tech stack by name
+    const techStack = await TechStack.findOne({ name: domain });
+    if (!techStack) throw new Error(`Tech stack '${domain}' not found.`);
+    // Fetch all questions for this tech stack
+    const questions = await Question.find({ techStack: techStack._id }).sort({ createdAt: 1 });
+    if (!questions.length) throw new Error(`No questions found for tech stack '${domain}'.`);
+    this.questions = questions.map(q => q.text);
+    this.currentQuestionIndex = 0;
   }
 
   async initializeAvatar() {
@@ -428,6 +421,24 @@ class AIInterviewer {
       communicationScore,
       timeElapsed
     };
+  }
+
+  async recordAnswer(audioPath, text) {
+    const currentQuestion = this.questions[this.currentQuestionIndex];
+    // Store both audio and text for the answer
+    await interviewReportService.addQuestionResponse(
+      this.roomSid,
+      currentQuestion,
+      { audio: audioPath, text }
+    );
+    this.currentQuestionIndex++;
+    // Return next question or null if done
+    if (this.currentQuestionIndex < this.questions.length) {
+      return this.questions[this.currentQuestionIndex];
+    } else {
+      this.isActive = false;
+      return null;
+    }
   }
 }
 

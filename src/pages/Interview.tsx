@@ -385,128 +385,44 @@ const Interview: React.FC = () => {
     }
   };
   
-  const handleRecordingComplete = async (audioBlob: Blob, transcript?: string) => {
-    if (!currentInterview || !currentQuestion) return;
-    
-    setIsSubmitting(true);
-    
+  // Add this function to submit answer to backend
+  const submitAnswer = async (audioBlob: Blob, transcript: string) => {
+    if (!interviewId) return;
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'answer.webm');
+    formData.append('text', transcript);
     try {
-      console.log('Recording complete with transcript:', transcript);
-      
-      // Check if transcript is empty or contains the placeholder text
-      const actualTranscript = transcript && !transcript.includes('[TRANSCRIPT FROM WEB SPEECH API NOT AVAILABLE]') 
-        ? transcript 
-        : '';
-        
-      console.log('Using transcript:', actualTranscript);
-      
-      // Upload the audio file to get a URL
-      let audioUrl = '';
-      try {
-        const uploadResponse = await uploadAPI.uploadAudio(audioBlob);
-        audioUrl = uploadResponse.data.data.fileUrl;
-        console.log('Audio uploaded successfully:', audioUrl);
-      } catch (uploadError) {
-        console.error('Error uploading audio:', uploadError);
-        toast.error('Failed to upload audio');
-      }
-      
-      // If we have a transcript and code, send to AI for evaluation
-      let aiEvaluation = null;
-      if (actualTranscript || (showCodeEditor && code)) {
-        try {
-          console.log('Sending to AI for evaluation:', {
-            question: currentQuestion.text,
-            transcript: actualTranscript,
-            techStack: techStackName,
-            code: showCodeEditor ? code : undefined
-          });
-          
-          const evaluationResponse = await aiAPI.evaluate({
-            question: currentQuestion.text,
-            transcript: actualTranscript || 'No verbal response provided.',
-            techStack: techStackName,
-            code: showCodeEditor ? code : undefined
-          });
-          
-          aiEvaluation = evaluationResponse.data.data;
-          console.log('AI evaluation received:', aiEvaluation);
-        } catch (aiError) {
-          console.error('Error getting AI evaluation:', aiError);
-          toast.error('Failed to get AI evaluation');
-        }
-      }
-      
-      // Save the answer to the database
-      try {
-        // Create a blob from the audio URL
-        let audioBlobToSave: Blob;
-        try {
-          // Convert the audio URL back to a blob
-          const response = await fetch(audioUrl);
-          audioBlobToSave = await response.blob();
-        } catch (error) {
-          console.error('Error converting audio URL to blob:', error);
-          // Create an empty blob as fallback
-          audioBlobToSave = new Blob([], { type: 'audio/webm' });
-        }
-        
-        // Call saveAnswer with individual parameters
-        await saveAnswer(
-          currentInterview.id,
-          currentQuestion.id,
-          audioBlobToSave,
-          actualTranscript,
-          showCodeEditor ? code : ''
-        );
-        console.log('Answer saved to database');
-      } catch (saveError) {
-        console.error('Error saving answer to database:', saveError);
-      }
-      
-      // Create a local answer object to display immediately
-      const localAnswer = {
-        id: Date.now().toString(),
-        questionId: currentQuestion.id,
-        questionText: currentQuestion.text,
-        audioBlob,
-        audioUrl: URL.createObjectURL(audioBlob),
-        transcript: actualTranscript,
-        code: showCodeEditor ? code : '',
-        score: aiEvaluation?.score || null,
-        feedback: aiEvaluation?.feedback || null,
-        criteria: aiEvaluation?.criteria || null
-      };
-      
-      // Add to local answers array
-      setLocalAnswers(prev => {
-        // Replace if already exists for this question
-        const filtered = prev.filter(a => a.questionId !== currentQuestion.id);
-        return [...filtered, localAnswer];
+      const response = await fetch(`/api/v1/ai/interviewer/${interviewId}/answer`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
       });
-      
-      // Mark this question as answered
-      setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
-      
-      // Save progress to sessionStorage
-      const progress = {
-        questionIndex: currentQuestionIndex,
-        answeredQuestions: Array.from(answeredQuestions).concat(currentQuestion.id)
-      };
-      sessionStorage.setItem(`interview-progress-${interviewId}`, JSON.stringify(progress));
-      localStorage.setItem(`interview-progress-${interviewId}`, JSON.stringify(progress));
-      
-      toast.success('Answer recorded and evaluated! You can continue editing your code or move to the next question when ready.');
+      const data = await response.json();
+      if (data.success) {
+        if (data.finished) {
+          // Fetch and display the report
+          const reportRes = await fetch(`/api/v1/ai/interviewer/${interviewId}/report`, {
+            credentials: 'include',
+          });
+          const reportData = await reportRes.json();
+          setShowComplete(true);
+          setLocalAnswers(reportData.report.questions || []);
+        } else {
+          setCurrentQuestionIndex(prev => prev + 1);
+        }
+      } else {
+        toast.error(data.error || 'Failed to submit answer');
+      }
     } catch (error) {
-      console.error('Error saving answer:', error);
-      toast.error('Failed to save answer');
-    } finally {
-      setIsSubmitting(false);
-      // Don't automatically end answering or clear the code editor
-      // setIsAnswering(false);
-      // setShowCodeEditor(false);
-      // setCode('');
+      toast.error('Failed to submit answer');
     }
+  };
+
+  // Update the handler for recording complete
+  const handleRecordingComplete = async (audioBlob: Blob, transcript: string) => {
+    setIsSubmitting(true);
+    await submitAnswer(audioBlob, transcript);
+    setIsSubmitting(false);
   };
 
   const handleStartAnswering = () => {
@@ -864,33 +780,7 @@ const Interview: React.FC = () => {
                 {isAnswering ? (
                   <div className="mt-6">
                     <AudioRecorder 
-                      onRecordingComplete={(audioBlob, transcript) => {
-                        // Store the recording in local state without saving to database yet
-                        if (!currentQuestion) return;
-                        
-                        // Create a local answer object to display immediately
-                        const localAnswer = {
-                          id: Date.now().toString(),
-                          questionId: currentQuestion.id,
-                          questionText: currentQuestion.text,
-                          audioBlob,
-                          audioUrl: URL.createObjectURL(audioBlob),
-                          transcript: transcript || '',
-                          code: showCodeEditor ? code : '',
-                          score: null,
-                          feedback: null,
-                          criteria: null
-                        };
-                        
-                        // Add to local answers array
-                        setLocalAnswers(prev => {
-                          // Replace if already exists for this question
-                          const filtered = prev.filter(a => a.questionId !== currentQuestion.id);
-                          return [...filtered, localAnswer];
-                        });
-                        
-                        toast.success('Recording completed! Click "Save Response" when you are ready to submit.');
-                      }} 
+                      onRecordingComplete={handleRecordingComplete}
                       isDisabled={isSubmitting}
                       useSpeechRecognition={useFreeMode}
                     />

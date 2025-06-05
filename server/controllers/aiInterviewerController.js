@@ -1,5 +1,6 @@
 import AIInterviewer from '../services/aiInterviewerService.js';
 import Interview from '../models/Interview.js';
+import interviewReportService from '../services/interviewReportService.js';
 
 // Store active AI interviewers
 const activeInterviewers = new Map();
@@ -192,5 +193,54 @@ export const getInterviewStatus = async (req, res) => {
       success: false,
       error: 'Failed to get interview status'
     });
+  }
+};
+
+export const recordAnswer = async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    const aiInterviewer = activeInterviewers.get(interviewId);
+    if (!aiInterviewer) {
+      return res.status(404).json({
+        success: false,
+        error: 'AI interviewer not found for this interview'
+      });
+    }
+    // Get audio file and text from request
+    const audioFile = req.files && req.files.audio;
+    const text = req.body.text || '';
+    if (!audioFile) {
+      return res.status(400).json({ success: false, error: 'Audio file is required' });
+    }
+    // Save audio file to disk (or cloud, here just a temp path)
+    const audioPath = `/tmp/${Date.now()}_${audioFile.name}`;
+    await audioFile.mv(audioPath);
+    // Record answer
+    const nextQuestion = await aiInterviewer.recordAnswer(audioPath, text);
+    res.status(200).json({
+      success: true,
+      nextQuestion,
+      finished: !nextQuestion
+    });
+  } catch (error) {
+    console.error('Error recording answer:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record answer'
+    });
+  }
+};
+
+export const getInterviewReport = async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    const report = interviewReportService.getReport(interviewId);
+    if (!report) {
+      return res.status(404).json({ success: false, error: 'Report not found' });
+    }
+    res.status(200).json({ success: true, report });
+  } catch (error) {
+    console.error('Error getting interview report:', error);
+    res.status(500).json({ success: false, error: 'Failed to get report' });
   }
 }; 

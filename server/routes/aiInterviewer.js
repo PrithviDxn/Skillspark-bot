@@ -5,7 +5,9 @@ import {
   pauseInterview,
   resumeInterview,
   endInterview,
-  getInterviewStatus
+  getInterviewStatus,
+  recordAnswer,
+  getInterviewReport
 } from '../controllers/aiInterviewerController.js';
 import { protect } from '../middleware/auth.js';
 
@@ -25,5 +27,11 @@ router.post('/:interviewId/start', startInterview);
 router.post('/:interviewId/pause', pauseInterview);
 router.post('/:interviewId/resume', resumeInterview);
 router.post('/:interviewId/end', endInterview);
+
+// Record answer for current question
+router.post('/:interviewId/answer', recordAnswer);
+
+// Get interview report (all Q&A pairs)
+router.get('/:interviewId/report', getInterviewReport);
 
 export default router; 

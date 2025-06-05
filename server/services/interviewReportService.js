@@ -24,22 +24,16 @@ class InterviewReportService {
     return report;
   }
 
-  async addQuestionResponse(interviewId, question, response) {
+  async addQuestionResponse(interviewId, question, answer) {
     const report = this.reports.get(interviewId);
     if (!report) {
       throw new Error('Interview report not found');
     }
-
-    // Analyze the response using GPT-4
-    const analysis = await this.analyzeResponse(question, response, report.domain);
-    
     report.questions.push({
       question,
-      response,
-      analysis,
+      answer, // { audio, text }
       timestamp: new Date()
     });
-
     return report;
   }
 
@@ -55,7 +49,7 @@ class InterviewReportService {
     Questions and Responses:
     ${report.questions.map((q, i) => `
     Q${i + 1}: ${q.question}
-    Response: ${q.response}
+    Response: ${q.answer.text}
     Analysis: ${q.analysis}
     `).join('\n')}
     
