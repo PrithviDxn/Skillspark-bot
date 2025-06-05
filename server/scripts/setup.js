@@ -9,6 +9,7 @@ const rootDir = path.join(__dirname, '..');
 
 // Check if running in development mode
 const isDev = process.argv.includes('--dev');
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Function to run a command and return a promise
 function runCommand(command, args, options = {}) {
@@ -30,40 +31,12 @@ function runCommand(command, args, options = {}) {
   });
 }
 
-// Function to create Python virtual environment
-async function createVenv() {
-  const isWindows = process.platform === 'win32';
-  const pythonCmd = isWindows ? 'python' : 'python3';
-  const venvPath = path.join(rootDir, 'venv');
-  const venvPython = isWindows 
-    ? path.join(venvPath, 'Scripts', 'python.exe')
-    : path.join(venvPath, 'bin', 'python');
-
-  try {
-    // Check if venv already exists
-    if (fs.existsSync(venvPath)) {
-      console.log('Virtual environment already exists');
-      return venvPython;
-    }
-
-    // Create virtual environment
-    console.log('Creating Python virtual environment...');
-    await runCommand(pythonCmd, ['-m', 'venv', 'venv'], { cwd: rootDir });
-    console.log('Virtual environment created successfully');
-
-    return venvPython;
-  } catch (error) {
-    console.error('Failed to create virtual environment:', error);
-    throw error;
-  }
-}
-
 // Function to install Python requirements
-async function installRequirements(venvPython) {
+async function installRequirements() {
   try {
     console.log('Installing Python requirements...');
-    const pipCmd = process.platform === 'win32' ? 'pip' : 'pip3';
-    await runCommand(venvPython, ['-m', pipCmd, 'install', '-r', 'requirements.txt'], { cwd: rootDir });
+    const pipCmd = isProduction ? 'pip3' : 'pip';
+    await runCommand(pipCmd, ['install', '-r', 'requirements.txt'], { cwd: rootDir });
     console.log('Python requirements installed successfully');
   } catch (error) {
     console.error('Failed to install Python requirements:', error);
@@ -89,11 +62,24 @@ async function setup() {
     // Create required directories
     createDirectories();
 
-    // Create virtual environment
-    const venvPython = await createVenv();
+    if (!isProduction) {
+      // Only create virtual environment in development
+      const isWindows = process.platform === 'win32';
+      const pythonCmd = isWindows ? 'python' : 'python3';
+      const venvPath = path.join(rootDir, 'venv');
+
+      // Check if venv already exists
+      if (!fs.existsSync(venvPath)) {
+        console.log('Creating Python virtual environment...');
+        await runCommand(pythonCmd, ['-m', 'venv', 'venv'], { cwd: rootDir });
+        console.log('Virtual environment created successfully');
+      } else {
+        console.log('Virtual environment already exists');
+      }
+    }
 
     // Install requirements
-    await installRequirements(venvPython);
+    await installRequirements();
 
     console.log('Setup completed successfully!');
   } catch (error) {

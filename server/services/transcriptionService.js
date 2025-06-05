@@ -1,12 +1,50 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const rootDir = path.join(__dirname, '..');
 
 // Keep track of ongoing transcriptions to prevent duplicates
 const activeTranscriptions = new Map();
+
+// Function to get the correct Python executable path
+function getPythonPath() {
+  const isWindows = process.platform === 'win32';
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  if (isProduction) {
+    // In production (Render), Python is available system-wide
+    return 'python3';
+  }
+  
+  // In development, use the virtual environment
+  const venvPath = path.join(rootDir, 'venv');
+  return isWindows 
+    ? path.join(venvPath, 'Scripts', 'python.exe')
+    : path.join(venvPath, 'bin', 'python');
+}
+
+// Function to get the correct script path
+function getScriptPath() {
+  return path.join(rootDir, 'transcribe_faster_whisper.py');
+}
+
+// Function to ensure required directories exist
+function ensureDirectories() {
+  const dirs = ['uploads', 'tmp'];
+  dirs.forEach(dir => {
+    const dirPath = path.join(rootDir, dir);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+  });
+}
+
+// Initialize directories
+ensureDirectories();
 
 /**
  * Transcribe audio file using faster-whisper
@@ -25,21 +63,16 @@ export async function transcribeAudio(audioFilePath, roomSid) {
     try {
       console.log('Starting transcription with faster-whisper...');
       
-      // Get the absolute path to the Python script
-      const scriptPath = path.join(__dirname, '..', 'transcribe_faster_whisper.py');
-      console.log('Script path:', scriptPath);
+      const pythonPath = getPythonPath();
+      const scriptPath = getScriptPath();
+      
+      console.log('Using Python path:', pythonPath);
+      console.log('Using script path:', scriptPath);
       console.log('Audio file path:', audioFilePath);
 
-      // Get the path to the virtual environment's Python
-      const venvPython = process.platform === 'win32' 
-        ? path.join(__dirname, '..', 'venv', 'Scripts', 'python.exe')
-        : path.join(__dirname, '..', 'venv', 'bin', 'python');
-
-      // Run the Python script using the virtual environment's Python
-      const pythonProcess = spawn(venvPython, [
-        scriptPath,
-        audioFilePath
-      ]);
+      const process = spawn(pythonPath, [scriptPath, audioFilePath], {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
 
       let transcription = '';
       let segments = [];
@@ -49,7 +82,7 @@ export async function transcribeAudio(audioFilePath, roomSid) {
 
       // Set a timeout for the transcription process
       const timeout = setTimeout(() => {
-        pythonProcess.kill();
+        process.kill();
         const error = 'Transcription timed out after 5 minutes';
         console.error(error);
         activeTranscriptions.delete(roomSid);
@@ -59,7 +92,7 @@ export async function transcribeAudio(audioFilePath, roomSid) {
         });
       }, 5 * 60 * 1000); // 5 minutes timeout
 
-      pythonProcess.stdout.on('data', (data) => {
+      process.stdout.on('data', (data) => {
         hasOutput = true;
         lastProgressTime = Date.now();
         
@@ -84,7 +117,7 @@ export async function transcribeAudio(audioFilePath, roomSid) {
         }
       });
 
-      pythonProcess.stderr.on('data', (data) => {
+      process.stderr.on('data', (data) => {
         hasOutput = true;
         lastProgressTime = Date.now();
         console.error('Python error:', data.toString());
@@ -97,7 +130,7 @@ export async function transcribeAudio(audioFilePath, roomSid) {
         if (timeSinceLastProgress > 30000) { // 30 seconds without progress
           console.error('No progress for 30 seconds, killing process');
           clearInterval(progressCheck);
-          pythonProcess.kill();
+          process.kill();
           activeTranscriptions.delete(roomSid);
           reject({
             success: false,
@@ -106,7 +139,7 @@ export async function transcribeAudio(audioFilePath, roomSid) {
         }
       }, 5000); // Check every 5 seconds
 
-      pythonProcess.on('close', (code) => {
+      process.on('close', (code) => {
         clearTimeout(timeout);
         clearInterval(progressCheck);
         activeTranscriptions.delete(roomSid);
@@ -137,7 +170,7 @@ export async function transcribeAudio(audioFilePath, roomSid) {
         }
       });
 
-      pythonProcess.on('error', (error) => {
+      process.on('error', (error) => {
         clearTimeout(timeout);
         clearInterval(progressCheck);
         activeTranscriptions.delete(roomSid);
