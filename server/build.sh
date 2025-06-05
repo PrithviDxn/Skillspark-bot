@@ -1,34 +1,20 @@
-#!/usr/bin/env bash
-# exit on error
-set -o errexit
+#!/bin/bash
 
-# Change to the server directory
-cd "$(dirname "$0")"
+# Exit on error
+set -e
 
-echo "Installing Node.js dependencies..."
-npm install
+# Install system dependencies
+apt-get update
+apt-get install -y python3-pip ffmpeg
 
-echo "Setting up Python environment..."
-# Remove existing venv if it exists
-rm -rf /opt/render/project/src/venv
+# Install Python requirements
+pip3 install --upgrade pip
+pip3 install -r requirements.txt
 
-# Create new virtual environment in the correct location
-python -m venv /opt/render/project/src/venv
+# Verify installation
+python3 -c "import faster_whisper; print('faster-whisper installed successfully')"
 
-# Activate virtual environment and install dependencies
-source /opt/render/project/src/venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-
-echo "Creating necessary directories..."
-mkdir -p temp
-chmod 777 temp
-
-# Copy the Python script to the correct location
-cp whisper_simple_notepad.py /opt/render/project/src/whisper_simple_notepad.py
-
-# Set environment variables for Python
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-export HF_HOME="$(pwd)/.cache/huggingface"
+# Create required directories
+mkdir -p uploads tmp
 
 echo "Build completed successfully!" 

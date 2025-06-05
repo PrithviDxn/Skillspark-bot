@@ -45,7 +45,7 @@ async function installRequirements() {
     
     // Verify installation
     console.log('Verifying faster-whisper installation...');
-    await runCommand('python3', ['-c', 'import faster_whisper; print("faster-whisper installed successfully")'], { cwd: rootDir });
+    await runCommand('python3', ['-c', "import faster_whisper; print('faster-whisper installed successfully')"], { cwd: rootDir });
     
     console.log('Python requirements installed successfully');
   } catch (error) {

@@ -1,11 +1,31 @@
 services:
   - type: web
-    name: skillspark-server
+    name: skill-spark-backend
     env: node
-    buildCommand: cd server && npm install && npm run setup
-    startCommand: cd server && node server.js
+    buildCommand: |
+      cd server
+      chmod +x build.sh
+      ./build.sh
+      npm install
+    startCommand: cd server && npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PYTHON_VERSION
-        value: 3.10.0 
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRE
+        value: 30d
+      - key: JWT_COOKIE_EXPIRE
+        value: 30
+      - key: PORT
+        value: 5000
+      - key: FRONTEND_URL
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_DOMAIN
+        value: skillspark.ai 
