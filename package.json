@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "start": "node server/index.js",
+    "dev:server": "nodemon server/index.js",
+    "dev:client": "cd client && npm start",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -15,7 +18,6 @@
     "seed:delete": "node server/seeder.js -d",
     "dev:all": "concurrently \"npm run dev\" \"npm run server:dev\"",
     "predeploy": "npm install",
-    "start": "node server/index.js",
     "client": "cd client && npm start",
     "install-all": "npm install && cd client && npm install"
   },
@@ -103,7 +105,8 @@
     "nodemon": "^3.0.2",
     "postcss": "^8.4.47",
     "typescript": "^5.5.3",
-    "vite": "^5.4.1"
+    "vite": "^5.4.1",
+    "wait-on": "^7.2.0"
   },
   "description": "AI-powered interview system with video capabilities",
   "main": "server/index.js",

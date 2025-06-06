@@ -1,8 +1,8 @@
-const express = require('express');
+import express from 'express';
+import twilio from 'twilio';
+const { jwt: { AccessToken }, VideoGrant } = twilio;
+
 const router = express.Router();
-const twilio = require('twilio');
-const AccessToken = twilio.jwt.AccessToken;
-const VideoGrant = AccessToken.VideoGrant;
 
 // Initialize Twilio client
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -65,4 +65,4 @@ router.post('/report', async (req, res) => {
   }
 });
 
-module.exports = router; 
+export default router; 
