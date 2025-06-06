@@ -16,8 +16,13 @@ apt-get install -y \
     libgif-dev \
     librsvg2-dev
 
-# Install Python dependencies
-pip3 install faster-whisper
+# Clean up any existing Python packages
+pip3 uninstall -y numpy torch torchaudio faster-whisper || true
+
+# Install Python dependencies in specific order
+pip3 install numpy==1.24.3
+pip3 install torch==2.2.0 torchaudio==2.2.0
+pip3 install faster-whisper==0.10.0
 
 # Install Node.js dependencies
 npm install
@@ -25,13 +30,17 @@ npm install
 # Try to install canvas, but continue if it fails
 npm install canvas || echo "Canvas installation failed, continuing without it"
 
-# Install Python requirements
+# Install remaining Python requirements
 pip3 install --upgrade pip
 pip3 install -r requirements.txt
 
 # Verify installation
 echo 'import faster_whisper
-print("faster-whisper installed successfully")' > verify_install.py
+import torch
+import numpy as np
+print("faster-whisper installed successfully")
+print(f"PyTorch version: {torch.__version__}")
+print(f"NumPy version: {np.__version__}")' > verify_install.py
 python3 verify_install.py
 rm verify_install.py
 
