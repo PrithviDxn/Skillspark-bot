@@ -1,14 +1,9 @@
 import express from 'express';
-import { transcribeAudio, evaluateAnswer } from '../controllers/ai.js';
-import { protect } from '../middleware/auth.js';
+import { transcribeAudio } from '../controllers/ai.js';
 
 const router = express.Router();
 
-// Protect all routes
-router.use(protect);
-
-// AI Routes
+// Transcribe audio to text
 router.post('/transcribe', transcribeAudio);
-router.post('/evaluate', evaluateAnswer);
 
 export default router; 
