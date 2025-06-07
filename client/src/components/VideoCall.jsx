@@ -120,6 +120,9 @@ const VideoCall = ({ interviewId }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
+      {/* Debug: Render check for admin controls */}
+      {console.log('[VideoCall] user:', user, 'role:', user?.role, 'should render admin controls:', user?.role === 'admin')}
+      <div style={{color: 'blue', fontWeight: 'bold'}}>DEBUG: ADMIN CONTROLS RENDER CHECK</div>
       {/* Pass handlers and state to AIInterviewerControls */}
       <div className="absolute top-4 left-4 z-50">
         {user?.role === 'admin' && (
