@@ -28,6 +28,11 @@ const VideoCall = ({ interviewId }) => {
   const [toastMessage, setToastMessage] = useState('');
   const navigate = useNavigate();
   const [meetingEnded, setMeetingEnded] = useState(false);
+  // Candidate answer recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [recordedChunks, setRecordedChunks] = useState([]);
 
   console.log('[VideoCall] Rendered. isInitialized:', isInitialized, 'user:', user?.role);
 
@@ -146,6 +151,58 @@ const VideoCall = ({ interviewId }) => {
     setIsInterviewing(val);
   };
 
+  // Modified stopRecording to trigger next question immediately
+  const stopRecording = async () => {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+    }
+    // Immediately trigger next question
+    setIsUploading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/interview/${interviewId}/next-question`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await response.json();
+      if (data.question) {
+        setCurrentQuestion(data.question);
+      } else if (data.done) {
+        setCurrentQuestion('Interview complete!');
+      }
+    } catch (err) {
+      setCurrentQuestion('Error advancing to next question.');
+    }
+    setIsUploading(false);
+  };
+
+  // Modified recorder.onstop to upload in background
+  const startRecording = async () => {
+    setRecordedChunks([]);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new window.MediaRecorder(stream);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) setRecordedChunks((prev) => [...prev, e.data]);
+      };
+      recorder.onstop = () => {
+        const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+        // Upload in background
+        handleAnswerRecorded(audioBlob);
+        setIsRecording(false);
+        setMediaRecorder(null);
+        setRecordedChunks([]);
+      };
+      setMediaRecorder(recorder);
+      recorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert('Could not access microphone: ' + err.message);
+    }
+  };
+
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
       {/* Debug: Render check for admin controls */}
@@ -190,6 +247,32 @@ const VideoCall = ({ interviewId }) => {
           );
         })}
       </div>
+      {/* Candidate Record/Submit Answer UI */}
+      {user?.role === 'candidate' && currentQuestion && (
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center">
+          <div className="mb-2 text-lg font-semibold text-white bg-gray-800 px-4 py-2 rounded shadow">{currentQuestion}</div>
+          {!isRecording && !isUploading && (
+            <button
+              onClick={startRecording}
+              className="bg-green-600 text-white px-6 py-2 rounded shadow hover:bg-green-700 font-bold text-lg"
+              disabled={isRecording || isUploading}
+            >
+              <span role="img" aria-label="mic">🎤</span> Record Answer
+            </button>
+          )}
+          {isRecording && (
+            <button
+              onClick={stopRecording}
+              className="bg-red-600 text-white px-6 py-2 rounded shadow hover:bg-red-700 font-bold text-lg mt-2"
+            >
+              <span role="img" aria-label="stop">⏹️</span> Stop & Submit
+            </button>
+          )}
+          {isUploading && (
+            <div className="text-white mt-2">Uploading answer...</div>
+          )}
+        </div>
+      )}
       {/* Bot Avatar only when initialized */}
       {console.log('[VideoCall] isInitialized:', isInitialized, 'user:', user?.role)}
       {user?.role === 'admin' && isInitialized && (

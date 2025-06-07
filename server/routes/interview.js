@@ -3,6 +3,8 @@ import twilio from 'twilio';
 import { protect } from '../middleware/auth.js';
 import Interview from '../models/Interview.js';
 import { generateAccessToken } from '../services/twilioService.js';
+import { spawn } from 'child_process';
+import path from 'path';
 const { jwt: { AccessToken }, VideoGrant } = twilio;
 
 const router = express.Router();
@@ -200,6 +202,65 @@ router.post('/:id/answer', protect, async (req, res) => {
   } catch (error) {
     console.error('Error processing answer:', error);
     res.status(500).json({ success: false, error: 'Failed to process answer' });
+  }
+});
+
+// Advance to next question
+router.post('/:id/next-question', async (req, res) => {
+  try {
+    const interviewId = req.params.id;
+    // Find the interview
+    const interview = await Interview.findById(interviewId);
+    if (!interview) {
+      return res.status(404).json({ error: 'Interview not found' });
+    }
+    // Advance the current question index
+    if (typeof interview.currentQuestionIndex !== 'number') {
+      interview.currentQuestionIndex = 0;
+    } else {
+      interview.currentQuestionIndex += 1;
+    }
+    // Check if there are more questions
+    const questions = interview.questions || [];
+    if (interview.currentQuestionIndex >= questions.length) {
+      interview.status = 'completed';
+      await interview.save();
+      return res.json({ done: true, question: null });
+    }
+    // Save and return the next question
+    await interview.save();
+    const nextQuestion = questions[interview.currentQuestionIndex];
+    res.json({ done: false, question: nextQuestion });
+  } catch (err) {
+    console.error('Error advancing to next question:', err);
+    res.status(500).json({ error: 'Failed to advance to next question' });
+  }
+});
+
+// Start the headless bot for this interview
+router.post('/:id/start-bot', async (req, res) => {
+  try {
+    const interviewId = req.params.id;
+    const interview = await Interview.findById(interviewId);
+    if (!interview) {
+      return res.status(404).json({ error: 'Interview not found' });
+    }
+    // Generate a Twilio token for the bot
+    const botIdentity = 'bot';
+    const roomName = `interview-${interviewId}`;
+    const token = await generateAccessToken(interview._id, botIdentity);
+    // Path to bot.js
+    const botScript = path.resolve(__dirname, '../../bot/bot.js');
+    // Spawn the bot process
+    const child = spawn('node', [botScript, interviewId, token, roomName], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    res.json({ success: true, message: 'Bot started' });
+  } catch (err) {
+    console.error('Error starting bot:', err);
+    res.status(500).json({ error: 'Failed to start bot' });
   }
 });
 

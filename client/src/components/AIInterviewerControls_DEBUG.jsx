@@ -11,6 +11,8 @@ const AIInterviewerControls_DEBUG = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const { currentQuestion, setCurrentQuestion } = useInterview();
+  const [isBotStarting, setIsBotStarting] = useState(false);
+  const [botStarted, setBotStarted] = useState(false);
 
   const initializeBot = async () => {
     try {
@@ -117,6 +119,28 @@ const AIInterviewerControls_DEBUG = ({
     }
   };
 
+  const startBot = async () => {
+    setIsBotStarting(true);
+    setError(null);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/interview/${interviewId}/start-bot`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start bot');
+      }
+      setBotStarted(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsBotStarting(false);
+    }
+  };
+
   return (
     <div className="bg-white p-4 rounded-lg shadow-lg">
       <div className="space-y-4">
@@ -152,6 +176,13 @@ const AIInterviewerControls_DEBUG = ({
               {isLoading ? 'Ending...' : 'End Interview'}
             </button>
           )}
+          <button
+            onClick={startBot}
+            disabled={isBotStarting || botStarted}
+            className="w-full bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
+          >
+            {isBotStarting ? 'Starting Bot...' : botStarted ? 'Bot Started' : 'Start Bot'}
+          </button>
         </div>
 
         <div className="text-sm text-gray-600">
