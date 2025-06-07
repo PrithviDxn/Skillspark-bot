@@ -6,7 +6,7 @@ require('dotenv').config();
 const INTERVIEW_ID = process.env.INTERVIEW_ID || process.argv[2];
 const TOKEN = process.env.TWILIO_TOKEN || process.argv[3];
 const ROOM_NAME = process.env.ROOM_NAME || process.argv[4];
-const API_URL = process.env.API_URL || 'https://your-backend-url.com/api/v1';
+const API_URL = process.env.API_URL || 'https://skillspark-api.onrender.com/api/v1';
 const BOT_HTML = process.env.BOT_HTML || 'file://' + __dirname + '/bot.html';
 
 if (!INTERVIEW_ID || !TOKEN || !ROOM_NAME) {
@@ -24,7 +24,16 @@ async function fetchCurrentQuestion() {
 }
 
 (async () => {
-  const browser = await puppeteer.launch({ headless: true, args: ['--use-fake-ui-for-media-stream'] });
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: '/usr/bin/chromium-browser',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--single-process',
+      '--use-fake-ui-for-media-stream'
+    ]
+  });
   const page = await browser.newPage();
 
   // Helper to set question in the bot page
