@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { techStackAPI } from '@/api';
 
 const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, isInterviewing, setIsInterviewing }) => {
+  console.log('[AIInterviewerControls] MOUNTED');
   const [selectedTechStack, setSelectedTechStack] = useState('');
   const [techStacks, setTechStacks] = useState([]);
   const { toast } = useToast();
@@ -217,7 +218,10 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
           </Select>
         </div>
         <Button 
-          onClick={initializeInterviewer} 
+          onClick={() => {
+            console.log('[AIInterviewerControls] Initialize button clicked');
+            initializeInterviewer();
+          }}
           className="w-full"
           disabled={!selectedTechStack}
         >

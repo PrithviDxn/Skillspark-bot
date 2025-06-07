@@ -6,6 +6,7 @@ import AIInterviewerControls from './AIInterviewerControls';
 import BotAvatar from './BotAvatar';
 
 const VideoCall = ({ interviewId }) => {
+  console.log('[VideoCall] MOUNTED');
   const videoRef = useRef(null);
   const roomRef = useRef(null);
   const [botVideoTrack, setBotVideoTrack] = useState(null);
