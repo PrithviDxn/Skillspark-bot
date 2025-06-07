@@ -1,16 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
 import { useToast } from './ui/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { techStackAPI } from '@/api';
 
 const AIInterviewerControls = ({ interviewId }) => {
-  const [domain, setDomain] = useState('');
-  const [customInstructions, setCustomInstructions] = useState('');
+  const [selectedTechStack, setSelectedTechStack] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInterviewing, setIsInterviewing] = useState(false);
+  const [techStacks, setTechStacks] = useState([]);
   const { toast } = useToast();
+
+  // Fetch tech stacks on component mount
+  useEffect(() => {
+    fetchTechStacks();
+  }, []);
+
+  const fetchTechStacks = async () => {
+    try {
+      const response = await techStackAPI.getAll();
+      if (response.data && response.data.data) {
+        setTechStacks(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching tech stacks:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch tech stacks",
+        variant: "destructive",
+      });
+    }
+  };
 
   const initializeInterviewer = async () => {
     try {
@@ -22,7 +43,7 @@ const AIInterviewerControls = ({ interviewId }) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           },
-          body: JSON.stringify({ domain, customInstructions })
+          body: JSON.stringify({ domain: selectedTechStack })
         }
       );
 
@@ -178,26 +199,26 @@ const AIInterviewerControls = ({ interviewId }) => {
     return (
       <div className="p-4 bg-gray-800 rounded-lg space-y-4">
         <h3 className="text-lg font-semibold text-white">Initialize AI Interviewer</h3>
-        <div>
-          <Label htmlFor="domain">Interview Domain</Label>
-          <Input
-            id="domain"
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            placeholder="e.g., Frontend Development, Data Science"
-          />
+        <div className="space-y-2">
+          <Label htmlFor="techStack">Select Tech Stack</Label>
+          <Select value={selectedTechStack} onValueChange={setSelectedTechStack}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a tech stack" />
+            </SelectTrigger>
+            <SelectContent>
+              {techStacks.map((stack) => (
+                <SelectItem key={stack._id} value={stack.name}>
+                  {stack.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <div>
-          <Label htmlFor="customInstructions">Custom Instructions (Optional)</Label>
-          <Textarea
-            id="customInstructions"
-            value={customInstructions}
-            onChange={(e) => setCustomInstructions(e.target.value)}
-            placeholder="Enter any specific instructions or topics to focus on"
-            rows={3}
-          />
-        </div>
-        <Button onClick={initializeInterviewer} className="w-full">
+        <Button 
+          onClick={initializeInterviewer} 
+          className="w-full"
+          disabled={!selectedTechStack}
+        >
           Initialize AI Interviewer
         </Button>
       </div>

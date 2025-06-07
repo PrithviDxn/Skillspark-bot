@@ -1,9 +1,18 @@
-import React, { useEffect, useRef } from 'react';
-import Video from 'twilio-video';
+import React, { useEffect, useState, useRef } from 'react';
+import { Video, connect } from 'twilio-video';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import AIInterviewerControls from './AIInterviewerControls';
+import BotAvatar from './BotAvatar';
 
-const VideoCall = ({ token, roomName }) => {
+const VideoCall = ({ interviewId }) => {
   const videoRef = useRef(null);
   const roomRef = useRef(null);
+  const [botVideoTrack, setBotVideoTrack] = useState(null);
+  const [currentQuestion, setCurrentQuestion] = useState('');
+  const [videoContainers, setVideoContainers] = useState([]);
+  const [mediaUnlocked, setMediaUnlocked] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     let localTrack;
@@ -53,14 +62,86 @@ const VideoCall = ({ token, roomName }) => {
     };
   }, [token, roomName]);
 
+  // Add this function to handle bot video track
+  const handleBotVideoTrack = (track) => {
+    if (track) {
+      setBotVideoTrack(track);
+      setVideoContainers(prev => [...prev, {
+        track,
+        isLocal: false,
+        kind: 'video'
+      }]);
+    }
+  };
+
+  // Add this function to handle answer recording
+  const handleAnswerRecorded = async (audioBlob) => {
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob);
+      formData.append('interviewId', interviewId);
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/interview/answer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process answer');
+      }
+
+      const data = await response.json();
+      if (data.nextQuestion) {
+        setCurrentQuestion(data.nextQuestion);
+      }
+    } catch (error) {
+      console.error('Error processing answer:', error);
+    }
+  };
+
   return (
-    <div className="relative w-full h-full">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="w-full h-full object-cover"
-      />
+    <div className="fixed inset-0 flex flex-col bg-gray-900">
+      {renderAdminControls()}
+      {/* Unlock media button for candidate if remote tracks exist */}
+      {user?.role !== 'admin' && videoContainers.some(vc => !vc.isLocal) && !mediaUnlocked && (
+        <div className="absolute top-4 right-4 z-50">
+          <button
+            onClick={unlockMedia}
+            className="bg-blue-600 text-white px-4 py-2 rounded shadow-lg hover:bg-blue-700"
+          >
+            Click to enable audio/video
+          </button>
+        </div>
+      )}
+      <div className="flex-1 flex flex-wrap items-center justify-center p-2 gap-2 overflow-hidden">
+        {videoContainers.map(({ track, isLocal, kind }) => {
+          if (!track) {
+            console.log('[VideoCall] Skipping invalid track:', track);
+            return null;
+          }
+          return (
+            <TrackRenderer 
+              key={`${track.sid || track.id || (isLocal ? 'local' : 'remote')}-${kind}-${isLocal ? 'local' : 'remote'}`} 
+              track={track} 
+              kind={kind} 
+              isLocal={isLocal} 
+            />
+          );
+        })}
+      </div>
+      {/* Bot Avatar */}
+      {user?.role === 'admin' && (
+        <BotAvatar
+          token={token}
+          roomName={`interview-${interviewId}`}
+          questionText={currentQuestion}
+          onAnswerRecorded={handleAnswerRecorded}
+          onVideoTrack={handleBotVideoTrack}
+        />
+      )}
     </div>
   );
 };
