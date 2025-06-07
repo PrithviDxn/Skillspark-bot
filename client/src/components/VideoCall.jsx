@@ -16,6 +16,18 @@ const VideoCall = ({ interviewId }) => {
   const { user } = useAuth();
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInterviewing, setIsInterviewing] = useState(false);
+  const [room, setRoom] = useState(null);
+  const [localParticipant, setLocalParticipant] = useState(null);
+  const [remoteParticipants, setRemoteParticipants] = useState([]);
+  const [isConnecting, setIsConnecting] = useState(true);
+  const [error, setError] = useState(null);
+  const [isWaitingForCandidate, setIsWaitingForCandidate] = useState(false);
+  const [trackUpdateCount, setTrackUpdateCount] = useState(0);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [toastMessage, setToastMessage] = useState('');
+  const navigate = useNavigate();
+  const [meetingEnded, setMeetingEnded] = useState(false);
 
   console.log('[VideoCall] Rendered. isInitialized:', isInitialized, 'user:', user?.role);
 
@@ -68,16 +80,32 @@ const VideoCall = ({ interviewId }) => {
     };
   }, [token, roomName]);
 
+  // Update video containers when tracks change
+  useEffect(() => {
+    const tracks = getAllVideoTracks();
+    const containers = tracks.map(({ track, isLocal, kind }) => ({
+      track,
+      isLocal,
+      kind
+    }));
+
+    // Add bot video track if available
+    if (botVideoTrack) {
+      containers.push({
+        track: botVideoTrack,
+        isLocal: false,
+        kind: 'video'
+      });
+    }
+
+    setVideoContainers(containers);
+  }, [localParticipant, remoteParticipants, trackUpdateCount, botVideoTrack]);
+
   // Add this function to handle bot video track
   const handleBotVideoTrack = (track) => {
     console.log('[VideoCall] Received bot video track:', track);
     if (track) {
       setBotVideoTrack(track);
-      setVideoContainers(prev => [...prev, {
-        track,
-        isLocal: false,
-        kind: 'video'
-      }]);
     }
   };
 

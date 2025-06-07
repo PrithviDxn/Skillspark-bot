@@ -54,54 +54,54 @@ const BotAvatar = ({ token, roomName, questionText, onAnswerRecorded, onVideoTra
     rightEye.style.top = '60px';
     rightEye.style.right = '50px';
 
+    // Add eyes to face
+    face.appendChild(leftEye);
+    face.appendChild(rightEye);
+
+    // Add face to avatar
+    avatar.appendChild(face);
+
     // Create mouth
     const mouth = document.createElement('div');
-    mouth.style.width = '60px';
-    mouth.style.height = '30px';
-    mouth.style.borderBottom = '3px solid #2C3E50';
-    mouth.style.borderRadius = '0 0 30px 30px';
+    mouth.style.width = '100px';
+    mouth.style.height = '20px';
+    mouth.style.backgroundColor = '#2C3E50';
+    mouth.style.borderRadius = '10px';
     mouth.style.position = 'absolute';
-    mouth.style.bottom = '60px';
+    mouth.style.bottom = '40px';
     mouth.style.left = '50%';
     mouth.style.transform = 'translateX(-50%)';
 
-    // Add elements to face
-    face.appendChild(leftEye);
-    face.appendChild(rightEye);
+    // Add mouth to face
     face.appendChild(mouth);
 
-    // Create question text container
-    const questionContainer = document.createElement('div');
-    questionContainer.style.width = '80%';
-    questionContainer.style.padding = '20px';
-    questionContainer.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-    questionContainer.style.borderRadius = '8px';
-    questionContainer.style.marginTop = '20px';
-    questionContainer.style.textAlign = 'center';
-    questionContainer.style.fontSize = '24px';
-    questionContainer.style.color = '#2C3E50';
-    questionContainer.style.fontFamily = 'Arial, sans-serif';
-    questionContainer.textContent = questionText || '';
+    // Add text display
+    const textDisplay = document.createElement('div');
+    textDisplay.style.position = 'absolute';
+    textDisplay.style.bottom = '20px';
+    textDisplay.style.left = '50%';
+    textDisplay.style.transform = 'translateX(-50%)';
+    textDisplay.style.color = '#ECF0F1';
+    textDisplay.style.fontSize = '24px';
+    textDisplay.style.textAlign = 'center';
+    textDisplay.style.width = '80%';
+    textDisplay.style.padding = '10px';
+    textDisplay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    textDisplay.style.borderRadius = '8px';
+    textDisplay.textContent = questionText || '';
 
-    // Add elements to avatar
-    avatar.appendChild(face);
-    avatar.appendChild(questionContainer);
+    // Add text display to avatar
+    avatar.appendChild(textDisplay);
 
-    // Add animation
-    const animate = () => {
-      face.style.transform = `scale(${1 + Math.sin(Date.now() / 1000) * 0.02})`;
-      requestAnimationFrame(animate);
-    };
-    animate();
+    // Update text when question changes
+    if (questionText) {
+      textDisplay.textContent = questionText;
+    }
 
-    console.log('[BotAvatar] Creating avatar DOM and video track');
-
+    // Cleanup function
     return () => {
-      if (roomRef.current) {
-        roomRef.current.disconnect();
-      }
-      if (videoTrackRef.current) {
-        videoTrackRef.current.stop();
+      if (avatar) {
+        avatar.innerHTML = '';
       }
     };
   }, [questionText]);
@@ -113,21 +113,31 @@ const BotAvatar = ({ token, roomName, questionText, onAnswerRecorded, onVideoTra
 
     async function joinRoom() {
       try {
+        console.log('[BotAvatar] Joining room:', roomName);
+        
         // Create video track from avatar element
+        const stream = avatarRef.current.captureStream(15);
+        const videoTrack = stream.getVideoTracks()[0];
+        
         localTrack = await Video.createLocalVideoTrack({
           name: 'bot-avatar',
           video: { width: 640, height: 480, frameRate: 15 },
-          mediaStreamTrack: avatarRef.current.captureStream(15).getVideoTracks()[0],
+          mediaStreamTrack: videoTrack
         });
 
-        // Connect to room
+        console.log('[BotAvatar] Created video track:', localTrack);
+
+        // Connect to room with bot identity
         room = await Video.connect(token, {
           name: roomName,
           tracks: [localTrack],
           dominantSpeaker: false,
           networkQuality: false,
           audio: false,
+          identity: 'bot'
         });
+
+        console.log('[BotAvatar] Connected to room:', room.sid);
 
         videoTrackRef.current = localTrack;
         roomRef.current = room;
@@ -140,13 +150,14 @@ const BotAvatar = ({ token, roomName, questionText, onAnswerRecorded, onVideoTra
         // Start recording when room is connected
         startRecording();
       } catch (error) {
-        console.error('Error joining room:', error);
+        console.error('[BotAvatar] Error joining room:', error);
       }
     }
 
     joinRoom();
 
     return () => {
+      console.log('[BotAvatar] Cleaning up');
       if (roomRef.current) {
         roomRef.current.disconnect();
       }
@@ -175,30 +186,29 @@ const BotAvatar = ({ token, roomName, questionText, onAnswerRecorded, onVideoTra
 
       mediaRecorderRef.current.start();
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('[BotAvatar] Error starting recording:', error);
     }
   };
 
   // Stop recording audio
   const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
   };
 
-  // Speak question using speech synthesis
-  useEffect(() => {
-    if (questionText) {
-      console.log('[BotAvatar] Speaking question:', questionText);
-      const utterance = new SpeechSynthesisUtterance(questionText);
-      window.speechSynthesis.speak(utterance);
-    }
-  }, [questionText]);
-
   return (
-    <div
+    <div 
       ref={avatarRef}
-      style={{ display: 'none' }}
+      style={{
+        width: '640px',
+        height: '480px',
+        backgroundColor: '#2C3E50',
+        borderRadius: '8px',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
     />
   );
 };
