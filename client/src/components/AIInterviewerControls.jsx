@@ -5,8 +5,10 @@ import { useToast } from './ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { techStackAPI } from '@/api';
 
-const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, isInterviewing, setIsInterviewing }) => {
-  console.log('[AIInterviewerControls] MOUNTED');
+console.log('[AIInterviewerControls_DEBUG] FILE AND COMPONENT MOUNTED');
+
+const AIInterviewerControls_DEBUG = ({ interviewId, isInitialized, setIsInitialized, isInterviewing, setIsInterviewing }) => {
+  console.log('[AIInterviewerControls_DEBUG] MOUNTED');
   const [selectedTechStack, setSelectedTechStack] = useState('');
   const [techStacks, setTechStacks] = useState([]);
   const { toast } = useToast();
@@ -33,7 +35,7 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
   };
 
   const initializeInterviewer = async () => {
-    console.log('[AIInterviewerControls] initializeInterviewer called');
+    console.log('[AIInterviewerControls_DEBUG] initializeInterviewer called');
     try {
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/ai-interviewer/${interviewId}/initialize`,
@@ -46,12 +48,12 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
           body: JSON.stringify({ domain: selectedTechStack })
         }
       );
-      console.log('[AIInterviewerControls] fetch returned', response);
+      console.log('[AIInterviewerControls_DEBUG] fetch returned', response);
       const data = await response.json();
-      console.log('[AIInterviewerControls] response.json()', data);
+      console.log('[AIInterviewerControls_DEBUG] response.json()', data);
       if (data.success) {
         setIsInitialized(true);
-        console.log('[AIInterviewerControls] setIsInitialized called with true');
+        console.log('[AIInterviewerControls_DEBUG] setIsInitialized called with true');
         toast({
           title: "Success",
           description: "AI interviewer initialized successfully",
@@ -60,7 +62,7 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
         throw new Error(data.error);
       }
     } catch (error) {
-      console.error('[AIInterviewerControls] Error in initializeInterviewer:', error);
+      console.error('[AIInterviewerControls_DEBUG] Error in initializeInterviewer:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to initialize AI interviewer",
@@ -219,7 +221,7 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
         </div>
         <Button 
           onClick={() => {
-            console.log('[AIInterviewerControls] Initialize button clicked');
+            console.log('[AIInterviewerControls_DEBUG] Initialize button clicked');
             initializeInterviewer();
           }}
           className="w-full"
@@ -257,4 +259,4 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
   );
 };
 
-export default AIInterviewerControls; 
+export default AIInterviewerControls_DEBUG; 

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Video, connect } from 'twilio-video';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import AIInterviewerControls from './AIInterviewerControls';
+import AIInterviewerControls_DEBUG from './AIInterviewerControls_DEBUG';
 import BotAvatar from './BotAvatar';
 
 const VideoCall = ({ interviewId }) => {
@@ -123,7 +123,7 @@ const VideoCall = ({ interviewId }) => {
       {/* Pass handlers and state to AIInterviewerControls */}
       <div className="absolute top-4 left-4 z-50">
         {user?.role === 'admin' && (
-          <AIInterviewerControls
+          <AIInterviewerControls_DEBUG
             interviewId={interviewId}
             isInitialized={isInitialized}
             setIsInitialized={handleInitialized}
