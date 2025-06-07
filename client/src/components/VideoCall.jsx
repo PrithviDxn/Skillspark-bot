@@ -16,6 +16,8 @@ const VideoCall = ({ interviewId }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInterviewing, setIsInterviewing] = useState(false);
 
+  console.log('[VideoCall] Rendered. isInitialized:', isInitialized, 'user:', user?.role);
+
   useEffect(() => {
     console.log('[VideoCall] Rendering VideoCall component');
     let localTrack;

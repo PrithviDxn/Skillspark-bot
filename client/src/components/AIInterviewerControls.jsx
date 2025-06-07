@@ -32,6 +32,7 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
   };
 
   const initializeInterviewer = async () => {
+    console.log('[AIInterviewerControls] initializeInterviewer called');
     try {
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/ai-interviewer/${interviewId}/initialize`,
@@ -44,8 +45,9 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
           body: JSON.stringify({ domain: selectedTechStack })
         }
       );
-
+      console.log('[AIInterviewerControls] fetch returned', response);
       const data = await response.json();
+      console.log('[AIInterviewerControls] response.json()', data);
       if (data.success) {
         setIsInitialized(true);
         console.log('[AIInterviewerControls] setIsInitialized called with true');
@@ -57,6 +59,7 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
         throw new Error(data.error);
       }
     } catch (error) {
+      console.error('[AIInterviewerControls] Error in initializeInterviewer:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to initialize AI interviewer",
