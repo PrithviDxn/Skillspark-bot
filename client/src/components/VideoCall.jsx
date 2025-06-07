@@ -13,6 +13,8 @@ const VideoCall = ({ interviewId }) => {
   const [videoContainers, setVideoContainers] = useState([]);
   const [mediaUnlocked, setMediaUnlocked] = useState(false);
   const { user } = useAuth();
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isInterviewing, setIsInterviewing] = useState(false);
 
   useEffect(() => {
     console.log('[VideoCall] Rendering VideoCall component');
@@ -104,9 +106,29 @@ const VideoCall = ({ interviewId }) => {
     }
   };
 
+  // Handler to update isInitialized from AIInterviewerControls
+  const handleInitialized = (val) => {
+    setIsInitialized(val);
+  };
+  // Handler to update isInterviewing from AIInterviewerControls
+  const handleInterviewing = (val) => {
+    setIsInterviewing(val);
+  };
+
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
-      {renderAdminControls()}
+      {/* Pass handlers and state to AIInterviewerControls */}
+      <div className="absolute top-4 left-4 z-50">
+        {user?.role === 'admin' && (
+          <AIInterviewerControls
+            interviewId={interviewId}
+            isInitialized={isInitialized}
+            setIsInitialized={handleInitialized}
+            isInterviewing={isInterviewing}
+            setIsInterviewing={handleInterviewing}
+          />
+        )}
+      </div>
       {/* Unlock media button for candidate if remote tracks exist */}
       {user?.role !== 'admin' && videoContainers.some(vc => !vc.isLocal) && !mediaUnlocked && (
         <div className="absolute top-4 right-4 z-50">
@@ -134,8 +156,8 @@ const VideoCall = ({ interviewId }) => {
           );
         })}
       </div>
-      {/* Bot Avatar */}
-      {user?.role === 'admin' && (
+      {/* Bot Avatar only when initialized */}
+      {user?.role === 'admin' && isInitialized && (
         <>
           {console.log('[VideoCall] Rendering BotAvatar for admin')}
           <BotAvatar
