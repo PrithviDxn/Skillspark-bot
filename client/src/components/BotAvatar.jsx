@@ -10,6 +10,7 @@ const BotAvatar = ({ token, roomName, questionText, onAnswerRecorded, onVideoTra
 
   // Initialize avatar
   useEffect(() => {
+    console.log('[BotAvatar] Mounted');
     const avatar = avatarRef.current;
     if (!avatar) return;
 
@@ -92,6 +93,8 @@ const BotAvatar = ({ token, roomName, questionText, onAnswerRecorded, onVideoTra
       requestAnimationFrame(animate);
     };
     animate();
+
+    console.log('[BotAvatar] Creating avatar DOM and video track');
 
     return () => {
       if (roomRef.current) {
@@ -186,6 +189,7 @@ const BotAvatar = ({ token, roomName, questionText, onAnswerRecorded, onVideoTra
   // Speak question using speech synthesis
   useEffect(() => {
     if (questionText) {
+      console.log('[BotAvatar] Speaking question:', questionText);
       const utterance = new SpeechSynthesisUtterance(questionText);
       window.speechSynthesis.speak(utterance);
     }

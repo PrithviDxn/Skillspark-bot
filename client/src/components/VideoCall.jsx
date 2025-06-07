@@ -15,6 +15,7 @@ const VideoCall = ({ interviewId }) => {
   const { user } = useAuth();
 
   useEffect(() => {
+    console.log('[VideoCall] Rendering VideoCall component');
     let localTrack;
     let room;
 
@@ -64,6 +65,7 @@ const VideoCall = ({ interviewId }) => {
 
   // Add this function to handle bot video track
   const handleBotVideoTrack = (track) => {
+    console.log('[VideoCall] Received bot video track:', track);
     if (track) {
       setBotVideoTrack(track);
       setVideoContainers(prev => [...prev, {
@@ -134,13 +136,16 @@ const VideoCall = ({ interviewId }) => {
       </div>
       {/* Bot Avatar */}
       {user?.role === 'admin' && (
-        <BotAvatar
-          token={token}
-          roomName={`interview-${interviewId}`}
-          questionText={currentQuestion}
-          onAnswerRecorded={handleAnswerRecorded}
-          onVideoTrack={handleBotVideoTrack}
-        />
+        <>
+          {console.log('[VideoCall] Rendering BotAvatar for admin')}
+          <BotAvatar
+            token={token}
+            roomName={`interview-${interviewId}`}
+            questionText={currentQuestion}
+            onAnswerRecorded={handleAnswerRecorded}
+            onVideoTrack={handleBotVideoTrack}
+          />
+        </>
       )}
     </div>
   );
