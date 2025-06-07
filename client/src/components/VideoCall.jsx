@@ -157,6 +157,7 @@ const VideoCall = ({ interviewId }) => {
         })}
       </div>
       {/* Bot Avatar only when initialized */}
+      {console.log('[VideoCall] isInitialized:', isInitialized, 'user:', user?.role)}
       {user?.role === 'admin' && isInitialized && (
         <>
           {console.log('[VideoCall] Rendering BotAvatar for admin')}

@@ -48,6 +48,7 @@ const AIInterviewerControls = ({ interviewId, isInitialized, setIsInitialized, i
       const data = await response.json();
       if (data.success) {
         setIsInitialized(true);
+        console.log('[AIInterviewerControls] setIsInitialized called with true');
         toast({
           title: "Success",
           description: "AI interviewer initialized successfully",
