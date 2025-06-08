@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AIInterviewerControls_DEBUG from './AIInterviewerControls_DEBUG';
 import BotAvatar from './BotAvatar';
+import TechStackSelector from './TechStackSelector';
 
 const VideoCall = ({ interviewId }) => {
   console.log('[VideoCall] MOUNTED');
@@ -33,6 +34,8 @@ const VideoCall = ({ interviewId }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [recordedChunks, setRecordedChunks] = useState([]);
+  // Add state for selectedTechStack
+  const [selectedTechStack, setSelectedTechStack] = useState('');
 
   console.log('[VideoCall] Rendered. isInitialized:', isInitialized, 'user:', user?.role);
 
@@ -219,6 +222,15 @@ const VideoCall = ({ interviewId }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
+      {/* Tech Stack Selector: Show before interview starts */}
+      {!isInterviewing && (
+        <div className="absolute top-4 right-4 z-50">
+          <TechStackSelector
+            selectedStack={selectedTechStack}
+            onStackChange={setSelectedTechStack}
+          />
+        </div>
+      )}
       {/* Debug: Render check for admin controls */}
       {console.log('[VideoCall] user:', user, 'role:', user?.role, 'should render admin controls:', user?.role === 'admin')}
       <div style={{color: 'blue', fontWeight: 'bold'}}>DEBUG: ADMIN CONTROLS RENDER CHECK</div>
@@ -231,6 +243,7 @@ const VideoCall = ({ interviewId }) => {
             setIsInitialized={handleInitialized}
             isInterviewing={isInterviewing}
             setIsInterviewing={handleInterviewing}
+            selectedTechStack={selectedTechStack}
           />
         )}
       </div>

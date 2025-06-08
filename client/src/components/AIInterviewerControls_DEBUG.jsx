@@ -6,7 +6,8 @@ const AIInterviewerControls_DEBUG = ({
   isInitialized, 
   setIsInitialized, 
   isInterviewing, 
-  setIsInterviewing 
+  setIsInterviewing,
+  selectedTechStack
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -58,6 +59,7 @@ const AIInterviewerControls_DEBUG = ({
       
       console.log('[AIInterviewerControls] Starting interview:', interviewId);
       
+      // Start interview in main backend
       const response = await fetch(`${import.meta.env.VITE_API_URL}/interview/${interviewId}/start`, {
         method: 'POST',
         headers: {
@@ -79,6 +81,30 @@ const AIInterviewerControls_DEBUG = ({
       if (data.question) {
         setCurrentQuestion(data.question);
       }
+
+      // --- NEW: Call bot backend to set tech stack and start bot ---
+      if (selectedTechStack) {
+        // Set tech stack for bot
+        const setStackRes = await fetch(`${BOT_BACKEND_URL}/api/bot/${interviewId}/set-techstack`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ techStackId: selectedTechStack })
+        });
+        const setStackData = await setStackRes.json();
+        if (!setStackRes.ok) {
+          throw new Error(setStackData.error || 'Failed to set tech stack for bot');
+        }
+      }
+      // Start bot session
+      const startBotRes = await fetch(`${BOT_BACKEND_URL}/api/bot/${interviewId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const startBotData = await startBotRes.json();
+      if (!startBotRes.ok) {
+        throw new Error(startBotData.error || 'Failed to start bot session');
+      }
+      // --- END NEW ---
     } catch (err) {
       console.error('[AIInterviewerControls] Error starting interview:', err);
       setError(err.message);
