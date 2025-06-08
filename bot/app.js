@@ -19,7 +19,11 @@ const wss = new Server({ server });
 
 app.use(bodyParser.json());
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'https://skill-spark-interview-ai.netlify.app',
+    'https://skillsparkai.netlify.app',
+  ],
   credentials: true
 }));
 
