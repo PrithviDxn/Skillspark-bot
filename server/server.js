@@ -6,7 +6,7 @@ import cors from 'cors';
 import fileUpload from 'express-fileupload';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
-import { initializeWebSocket } from './websocket.js';
+
 
 
 import videoRoutes from './routes/video.js';
@@ -171,8 +171,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   process.exit(1);
 });
 
-// Initialize WebSocket server
-initializeWebSocket(server);
+
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {
