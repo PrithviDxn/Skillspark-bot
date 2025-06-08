@@ -13,6 +13,7 @@ const AIInterviewerControls_DEBUG = ({
   const { currentQuestion, setCurrentQuestion } = useInterview();
   const [isBotStarting, setIsBotStarting] = useState(false);
   const [botStarted, setBotStarted] = useState(false);
+  const BOT_BACKEND_URL = import.meta.env.VITE_BOT_BACKEND_URL || 'http://localhost:5001';
 
   const initializeBot = async () => {
     try {
@@ -123,11 +124,9 @@ const AIInterviewerControls_DEBUG = ({
     setIsBotStarting(true);
     setError(null);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/interview/${interviewId}/start-bot`, {
+      const response = await fetch(`${BOT_BACKEND_URL}/api/bot/${interviewId}/start`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
       const data = await response.json();
       if (!response.ok) {
