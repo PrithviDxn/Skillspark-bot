@@ -5,6 +5,8 @@ import { useToast } from './ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { techStackAPI } from '@/api';
 
+const BOT_BACKEND_URL = import.meta.env.VITE_BOT_BACKEND_URL || 'http://localhost:5001';
+
 const AIInterviewerControls = ({ interviewId }) => {
   const [selectedTechStack, setSelectedTechStack] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
@@ -35,28 +37,28 @@ const AIInterviewerControls = ({ interviewId }) => {
 
   const initializeInterviewer = async () => {
     try {
+      // Set tech stack for bot
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/ai-interviewer/${interviewId}/initialize`,
+        `${BOT_BACKEND_URL}/api/bot/${interviewId}/set-techstack`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          body: JSON.stringify({ domain: selectedTechStack })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ techStackId: selectedTechStack })
         }
       );
-
       const data = await response.json();
-      if (data.success) {
-        setIsInitialized(true);
-        toast({
-          title: "Success",
-          description: "AI interviewer initialized successfully",
-        });
-      } else {
-        throw new Error(data.error);
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to set tech stack for bot');
+
+      // Start bot session
+      const startRes = await fetch(
+        `${BOT_BACKEND_URL}/api/bot/${interviewId}/start`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+      );
+      const startData = await startRes.json();
+      if (!startRes.ok) throw new Error(startData.error || 'Failed to start bot session');
+
+      setIsInitialized(true);
+      toast({ title: "Success", description: "AI interviewer initialized successfully" });
     } catch (error) {
       toast({
         title: "Error",
@@ -69,26 +71,19 @@ const AIInterviewerControls = ({ interviewId }) => {
   const startInterview = async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/ai-interviewer/${interviewId}/start`,
+        `${BOT_BACKEND_URL}/api/bot/${interviewId}/start`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+          headers: { 'Content-Type': 'application/json' }
         }
       );
-
       const data = await response.json();
-      if (data.success) {
-        setIsInterviewing(true);
-        toast({
-          title: "Success",
-          description: "Interview started",
-        });
-      } else {
-        throw new Error(data.error);
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to start interview');
+      setIsInterviewing(true);
+      toast({
+        title: "Success",
+        description: "Interview started",
+      });
     } catch (error) {
       toast({
         title: "Error",
@@ -101,26 +96,19 @@ const AIInterviewerControls = ({ interviewId }) => {
   const pauseInterview = async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/ai-interviewer/${interviewId}/pause`,
+        `${BOT_BACKEND_URL}/api/bot/${interviewId}/pause`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+          headers: { 'Content-Type': 'application/json' }
         }
       );
-
       const data = await response.json();
-      if (data.success) {
-        setIsInterviewing(false);
-        toast({
-          title: "Success",
-          description: "Interview paused",
-        });
-      } else {
-        throw new Error(data.error);
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to pause interview');
+      setIsInterviewing(false);
+      toast({
+        title: "Success",
+        description: "Interview paused",
+      });
     } catch (error) {
       toast({
         title: "Error",
@@ -133,26 +121,19 @@ const AIInterviewerControls = ({ interviewId }) => {
   const resumeInterview = async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/ai-interviewer/${interviewId}/resume`,
+        `${BOT_BACKEND_URL}/api/bot/${interviewId}/resume`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+          headers: { 'Content-Type': 'application/json' }
         }
       );
-
       const data = await response.json();
-      if (data.success) {
-        setIsInterviewing(true);
-        toast({
-          title: "Success",
-          description: "Interview resumed",
-        });
-      } else {
-        throw new Error(data.error);
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to resume interview');
+      setIsInterviewing(true);
+      toast({
+        title: "Success",
+        description: "Interview resumed",
+      });
     } catch (error) {
       toast({
         title: "Error",
@@ -165,27 +146,20 @@ const AIInterviewerControls = ({ interviewId }) => {
   const endInterview = async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/ai-interviewer/${interviewId}/end`,
+        `${BOT_BACKEND_URL}/api/bot/${interviewId}/end`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+          headers: { 'Content-Type': 'application/json' }
         }
       );
-
       const data = await response.json();
-      if (data.success) {
-        setIsInitialized(false);
-        setIsInterviewing(false);
-        toast({
-          title: "Success",
-          description: "Interview ended",
-        });
-      } else {
-        throw new Error(data.error);
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to end interview');
+      setIsInitialized(false);
+      setIsInterviewing(false);
+      toast({
+        title: "Success",
+        description: "Interview ended",
+      });
     } catch (error) {
       toast({
         title: "Error",
