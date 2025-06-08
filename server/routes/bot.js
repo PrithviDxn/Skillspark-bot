@@ -1,6 +1,5 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth.js';
-import { sendToInterview } from '../websocket.js';
 
 const router = express.Router();
 
@@ -8,16 +7,10 @@ const router = express.Router();
 router.post('/start/:interviewId', protect, authorize('admin'), async (req, res) => {
   try {
     const { interviewId } = req.params;
-    
-    // Send start message to all participants
-    sendToInterview(interviewId, {
-      type: 'START_INTERVIEW',
-      timestamp: new Date().toISOString()
-    });
-
+    // This endpoint is now a placeholder; actual bot logic is in the new bot backend
     res.json({
       success: true,
-      message: 'Interview started'
+      message: 'Interview started (handled by new bot backend)'
     });
   } catch (err) {
     console.error('Error starting interview:', err);
@@ -32,15 +25,9 @@ router.post('/start/:interviewId', protect, authorize('admin'), async (req, res)
 router.post('/pause/:interviewId', protect, authorize('admin'), async (req, res) => {
   try {
     const { interviewId } = req.params;
-    
-    sendToInterview(interviewId, {
-      type: 'PAUSE_INTERVIEW',
-      timestamp: new Date().toISOString()
-    });
-
     res.json({
       success: true,
-      message: 'Interview paused'
+      message: 'Interview paused (handled by new bot backend)'
     });
   } catch (err) {
     console.error('Error pausing interview:', err);
@@ -55,15 +42,9 @@ router.post('/pause/:interviewId', protect, authorize('admin'), async (req, res)
 router.post('/resume/:interviewId', protect, authorize('admin'), async (req, res) => {
   try {
     const { interviewId } = req.params;
-    
-    sendToInterview(interviewId, {
-      type: 'RESUME_INTERVIEW',
-      timestamp: new Date().toISOString()
-    });
-
     res.json({
       success: true,
-      message: 'Interview resumed'
+      message: 'Interview resumed (handled by new bot backend)'
     });
   } catch (err) {
     console.error('Error resuming interview:', err);
@@ -78,15 +59,9 @@ router.post('/resume/:interviewId', protect, authorize('admin'), async (req, res
 router.post('/stop/:interviewId', protect, authorize('admin'), async (req, res) => {
   try {
     const { interviewId } = req.params;
-    
-    sendToInterview(interviewId, {
-      type: 'STOP_INTERVIEW',
-      timestamp: new Date().toISOString()
-    });
-
     res.json({
       success: true,
-      message: 'Interview stopped'
+      message: 'Interview stopped (handled by new bot backend)'
     });
   } catch (err) {
     console.error('Error stopping interview:', err);
@@ -101,8 +76,6 @@ router.post('/stop/:interviewId', protect, authorize('admin'), async (req, res) 
 router.get('/status/:interviewId', protect, async (req, res) => {
   try {
     const { interviewId } = req.params;
-    
-    // TODO: Implement actual status check from database
     res.json({
       success: true,
       status: 'active', // or 'paused', 'inactive'
