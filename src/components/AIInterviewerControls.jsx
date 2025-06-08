@@ -181,7 +181,7 @@ const AIInterviewerControls = ({ interviewId }) => {
             </SelectTrigger>
             <SelectContent>
               {techStacks.map((stack) => (
-                <SelectItem key={stack._id} value={stack.name}>
+                <SelectItem key={stack._id} value={stack._id}>
                   {stack.name}
                 </SelectItem>
               ))}
