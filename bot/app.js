@@ -19,11 +19,23 @@ const wss = new Server({ server });
 
 app.use(bodyParser.json());
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://skill-spark-interview-ai.netlify.app',
-    'https://skillsparkai.netlify.app',
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // Allow localhost
+    if (origin.startsWith('http://localhost')) return callback(null, true);
+
+    // Allow all Netlify deploys
+    if (/netlify\.app$/.test(origin)) return callback(null, true);
+
+    // Add any other allowed domains here
+    if (origin === 'https://skill-spark-interview-ai.netlify.app') return callback(null, true);
+    if (origin === 'https://skillsparkai.netlify.app') return callback(null, true);
+
+    // Otherwise, block
+    return callback(new Error('Not allowed by CORS'), false);
+  },
   credentials: true
 }));
 
