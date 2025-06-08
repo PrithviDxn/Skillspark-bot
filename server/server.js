@@ -6,6 +6,7 @@ import cors from 'cors';
 import fileUpload from 'express-fileupload';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
+import { initializeWebSocket } from './websocket.js';
 
 
 import videoRoutes from './routes/video.js';
@@ -20,6 +21,7 @@ import aiRoutes from './routes/ai.js';
 import roleRoutes from './routes/roles.js';
 import emailRoutes from './routes/email.js';
 import aiInterviewerRoutes from './routes/aiInterviewer.js';
+import botRoutes from './routes/bot.js';
 
 
 const app = express();
@@ -144,6 +146,7 @@ app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/email', emailRoutes);
 app.use('/api/v1/video', videoRoutes);
 app.use('/api/v1/ai-interviewer', aiInterviewerRoutes);
+app.use('/api/v1/bot', botRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
@@ -167,6 +170,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
+
+// Initialize WebSocket server
+initializeWebSocket(server);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {

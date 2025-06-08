@@ -111,15 +111,22 @@ const VideoCall = ({ interviewId }) => {
     console.log('[VideoCall] Received bot video track:', track);
     if (track) {
       setBotVideoTrack(track);
+      // Add bot participant to remote participants
+      setRemoteParticipants(prev => [...prev, {
+        identity: 'bot',
+        tracks: [track]
+      }]);
     }
   };
 
   // Add this function to handle answer recording
   const handleAnswerRecorded = async (audioBlob) => {
     try {
+      setIsUploading(true);
       const formData = new FormData();
       formData.append('audio', audioBlob);
       formData.append('interviewId', interviewId);
+      formData.append('question', currentQuestion);
 
       const response = await fetch(`${import.meta.env.VITE_API_URL}/interview/answer`, {
         method: 'POST',
@@ -136,9 +143,15 @@ const VideoCall = ({ interviewId }) => {
       const data = await response.json();
       if (data.nextQuestion) {
         setCurrentQuestion(data.nextQuestion);
+      } else if (data.done) {
+        setCurrentQuestion('Interview complete!');
+        setMeetingEnded(true);
       }
     } catch (error) {
       console.error('Error processing answer:', error);
+      setToastMessage('Error processing answer. Please try again.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -171,9 +184,10 @@ const VideoCall = ({ interviewId }) => {
         setCurrentQuestion(data.question);
       } else if (data.done) {
         setCurrentQuestion('Interview complete!');
+        setMeetingEnded(true);
       }
     } catch (err) {
-      setCurrentQuestion('Error advancing to next question.');
+      setToastMessage('Error advancing to next question.');
     }
     setIsUploading(false);
   };
@@ -199,7 +213,7 @@ const VideoCall = ({ interviewId }) => {
       recorder.start();
       setIsRecording(true);
     } catch (err) {
-      alert('Could not access microphone: ' + err.message);
+      setToastMessage('Could not access microphone: ' + err.message);
     }
   };
 
@@ -269,7 +283,7 @@ const VideoCall = ({ interviewId }) => {
             </button>
           )}
           {isUploading && (
-            <div className="text-white mt-2">Uploading answer...</div>
+            <div className="text-white mt-2">{toastMessage}</div>
           )}
         </div>
       )}
