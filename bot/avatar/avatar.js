@@ -21,8 +21,9 @@ let room = null;
 
 // Connect to WebSocket
 function connectWebSocket() {
-    // Use the same host for WebSocket as the current page
-    const wsUrl = `ws://${window.location.host}/ws?sessionId=${sessionId}`;
+    // Use wss:// if the page is loaded over HTTPS, otherwise ws://
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = `${protocol}://${window.location.host}/ws?sessionId=${sessionId}`;
     ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
