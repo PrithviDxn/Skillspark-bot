@@ -1,12 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SkillSpark Bot Avatar</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkillSpark AI Interviewer</title>
+    <script src="https://sdk.twilio.com/js/video/releases/2.25.0/twilio-video.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+        #status {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .connected { background: #4CAF50; }
+        .disconnected { background: #f44336; }
+        #video-container {
+            width: 100%;
+            max-width: 640px;
+            margin: 20px auto;
+        }
+        video {
+            width: 100%;
+            border-radius: 8px;
+        }
+        #log {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-  <div id="app"></div>
-  <script type="module" src="./main.js"></script>
+    <div id="status" class="disconnected">Disconnected</div>
+    <div id="video-container">
+        <video id="local-video" autoplay playsinline></video>
+    </div>
+    <div id="log"></div>
+    <script src="avatar.js"></script>
 </body>
 </html> 

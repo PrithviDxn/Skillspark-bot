@@ -8,6 +8,7 @@ const bodyParser = require('body-parser');
 const twilio = require('twilio');
 const cors = require('cors');
 const axios = require('axios');
+const path = require('path');
 
 // Placeholder for Twilio, OpenAI, and other integrations
 // const twilio = require('twilio');
@@ -38,6 +39,9 @@ app.use(cors({
   },
   credentials: true
 }));
+
+// Serve bot avatar static files
+app.use('/avatar', express.static(path.join(__dirname, 'avatar')));
 
 // In-memory state (replace with DB in production)
 const sessions = {};
