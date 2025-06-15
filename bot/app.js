@@ -21,18 +21,18 @@ const wss = new Server({ server });
 app.use(bodyParser.json());
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow requests with no origin (like curl or mobile apps)
     if (!origin) return callback(null, true);
 
-    // Allow localhost
+    // Allow localhost for local dev
     if (origin.startsWith('http://localhost')) return callback(null, true);
 
-    // Allow all Netlify deploys
+    // Allow all Netlify deploys and your specific Netlify site
     if (/netlify\.app$/.test(origin)) return callback(null, true);
+    if (origin === 'https://cheerful-gelato-34f049.netlify.app') return callback(null, true);
 
-    // Add any other allowed domains here
-    if (origin === 'https://skill-spark-interview-ai.netlify.app') return callback(null, true);
-    if (origin === 'https://skillsparkai.netlify.app') return callback(null, true);
+    // Allow your Render domain (if you ever open avatar from there)
+    if (origin === 'https://skillspark-bot.onrender.com') return callback(null, true);
 
     // Otherwise, block
     return callback(new Error('Not allowed by CORS'), false);
