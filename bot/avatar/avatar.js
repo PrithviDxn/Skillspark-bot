@@ -57,6 +57,29 @@ function connectWebSocket() {
     };
 }
 
+// Create a synthetic video track (canvas-based avatar)
+function createVideoTrack() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    const stream = canvas.captureStream(30); // 30 FPS
+    const videoTrack = stream.getVideoTracks()[0];
+    return videoTrack;
+}
+
+// Create a synthetic audio track (text-to-speech)
+function createAudioTrack(text) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.start();
+    gainNode.gain.value = 0.1; // Adjust volume
+    return oscillator;
+}
+
 // Join Twilio Video Room
 async function joinRoom() {
     try {
@@ -75,11 +98,14 @@ async function joinRoom() {
         const { token } = await response.json();
         log('Got token from backend');
 
-        // Connect to room
+        // Create synthetic video and audio tracks
+        const videoTrack = createVideoTrack();
+        const audioTrack = createAudioTrack('Hello, I am the AI Interviewer.');
+
+        // Connect to room with synthetic tracks
         room = await Twilio.Video.connect(token, {
             name: roomName,
-            audio: true,
-            video: true
+            tracks: [videoTrack, audioTrack]
         });
 
         log('Connected to room: ' + roomName);
