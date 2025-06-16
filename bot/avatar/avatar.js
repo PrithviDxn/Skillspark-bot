@@ -68,16 +68,16 @@ function createVideoTrack() {
     return videoTrack;
 }
 
-// Create a synthetic audio track (text-to-speech)
-function createAudioTrack(text) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+// Create a synthetic audio track (silent MediaStreamTrack)
+function createSilentAudioTrack() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = ctx.createOscillator();
+    const dst = ctx.createMediaStreamDestination();
+    oscillator.connect(dst);
     oscillator.start();
-    gainNode.gain.value = 0.1; // Adjust volume
-    return oscillator;
+    oscillator.frequency.value = 0; // Silent
+    const track = dst.stream.getAudioTracks()[0];
+    return track;
 }
 
 // Join Twilio Video Room
@@ -100,7 +100,7 @@ async function joinRoom() {
 
         // Create synthetic video and audio tracks
         const videoTrack = createVideoTrack();
-        const audioTrack = createAudioTrack('Hello, I am the AI Interviewer.');
+        const audioTrack = createSilentAudioTrack();
 
         // Connect to room with synthetic tracks
         room = await Twilio.Video.connect(token, {
