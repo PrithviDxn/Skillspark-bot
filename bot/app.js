@@ -9,6 +9,7 @@ const twilio = require('twilio');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
+const TranscriptionService = require('./transcription-service');
 
 // Placeholder for Twilio, OpenAI, and other integrations
 // const twilio = require('twilio');
@@ -17,6 +18,9 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const wss = new Server({ server });
+
+// Initialize transcription service
+const transcriptionService = new TranscriptionService();
 
 app.use(bodyParser.json());
 app.use(cors({
@@ -51,12 +55,15 @@ app.post('/api/bot/:sessionId/start', (req, res) => {
   const { sessionId } = req.params;
   sessions[sessionId] = sessions[sessionId] || { status: 'inactive', questions: [], current: 0 };
   sessions[sessionId].status = 'active';
-  // Send first question if available
+  
+  // Send first question if available and interview is starting
   if (sessions[sessionId].questions && sessions[sessionId].questions.length > 0) {
     const question = sessions[sessionId].questions[0];
-    broadcast(sessionId, { type: 'QUESTION', question });
+    broadcast(sessionId, { type: 'START_INTERVIEW', question });
+  } else {
+    broadcast(sessionId, { type: 'START_INTERVIEW' });
   }
-  broadcast(sessionId, { type: 'START' });
+  
   res.json({ success: true });
 });
 
@@ -97,7 +104,7 @@ app.post('/api/bot/:sessionId/set-techstack', async (req, res) => {
     // Fetch questions for this tech stack from the main API
     const apiUrl = process.env.QUESTION_API_URL || 'http://localhost:5000/api/v1/questions';
     const response = await axios.get(`${apiUrl}?techStack=${techStackId}`);
-    const questions = response.data?.data?.map(q => q.text) || [];
+    const questions = response.data?.data?.map(q => ({ id: q._id, text: q.text })) || [];
     if (!questions.length) return res.status(404).json({ error: 'No questions found for this tech stack' });
     sessions[sessionId] = sessions[sessionId] || {};
     sessions[sessionId].questions = questions;
@@ -117,12 +124,49 @@ app.post('/api/bot/:sessionId/next', (req, res) => {
   const idx = sessions[sessionId].current;
   const question = sessions[sessionId].questions[idx];
   if (question) {
-    broadcast(sessionId, { type: 'QUESTION', question });
-    res.json({ success: true, question });
+    broadcast(sessionId, { type: 'NEXT_QUESTION', question: question.text });
+    res.json({ success: true, question: question.text });
   } else {
     broadcast(sessionId, { type: 'END' });
     res.json({ success: false, message: 'No more questions' });
   }
+});
+
+// Get captured answers for a session
+app.get('/api/bot/:sessionId/answers', (req, res) => {
+  const { sessionId } = req.params;
+  if (!sessions[sessionId]) return res.status(404).json({ error: 'Session not found' });
+  
+  const answers = sessions[sessionId].answers || [];
+  const questions = sessions[sessionId].questions || [];
+  
+  // Format answers with questions
+  const formattedAnswers = answers.map(answer => ({
+    ...answer,
+    question: questions[answer.questionIndex]?.text || 'Unknown question'
+  }));
+  
+  res.json({ 
+    success: true, 
+    answers: formattedAnswers,
+    totalAnswers: answers.length,
+    totalQuestions: questions.length
+  });
+});
+
+// Get session status
+app.get('/api/bot/:sessionId/status', (req, res) => {
+  const { sessionId } = req.params;
+  if (!sessions[sessionId]) return res.status(404).json({ error: 'Session not found' });
+  
+  res.json({
+    success: true,
+    status: sessions[sessionId].status || 'inactive',
+    currentQuestion: sessions[sessionId].current || 0,
+    totalQuestions: sessions[sessionId].questions?.length || 0,
+    answersCount: sessions[sessionId].answers?.length || 0,
+    techStackId: sessions[sessionId].techStackId
+  });
 });
 
 // --- Twilio Video Token Endpoint ---
@@ -152,9 +196,110 @@ wss.on('connection', (ws, req) => {
   if (!sessionId) return ws.close();
   ws.sessionId = sessionId;
 
-  ws.on('message', (msg) => {
-    // Handle messages from avatar/frontend (e.g., answer, status)
-    // TODO: Store answers, process audio, etc.
+  ws.on('message', async (msg) => {
+    try {
+      const data = JSON.parse(msg);
+      
+      // Handle messages from avatar/frontend
+      if (data.type === 'ANSWER_RECEIVED') {
+        // Store the candidate's answer in bot session
+        if (!sessions[sessionId]) sessions[sessionId] = {};
+        if (!sessions[sessionId].answers) sessions[sessionId].answers = [];
+        
+        const currentQuestionIndex = sessions[sessionId].current || 0;
+        const currentQuestion = sessions[sessionId].questions?.[currentQuestionIndex];
+        
+        // Transcribe audio if available
+        let transcript = data.transcript || '';
+        if (data.audioBlob && !transcript) {
+          try {
+            const audioBuffer = Buffer.from(data.audioBlob, 'base64');
+            const transcriptionResult = await transcriptionService.transcribeAudio(
+              audioBuffer, 
+              `bot-answer-${sessionId}-${Date.now()}.wav`
+            );
+            
+            if (transcriptionResult.success) {
+              transcript = transcriptionResult.transcript;
+              console.log(`Transcription successful: ${transcript}`);
+            } else {
+              console.log(`Transcription failed: ${transcriptionResult.error}`);
+              transcript = `Audio captured from ${data.participantId} (transcription failed)`;
+            }
+          } catch (error) {
+            console.error('Transcription error:', error);
+            transcript = `Audio captured from ${data.participantId} (transcription error)`;
+          }
+        }
+        
+        // Store in bot session
+        sessions[sessionId].answers.push({
+          questionIndex: currentQuestionIndex,
+          answer: transcript,
+          timestamp: new Date().toISOString(),
+          participantId: data.participantId,
+          audioBlob: data.audioBlob,
+          transcript: transcript
+        });
+        
+        console.log(`Answer stored for session ${sessionId}:`, transcript);
+        
+        // --- INTEGRATION: Save answer to main database ---
+        if (currentQuestion && data.audioBlob) {
+          try {
+            // Convert base64 audio to buffer
+            const audioBuffer = Buffer.from(data.audioBlob, 'base64');
+            
+            // Upload audio to main server
+            const mainApiUrl = process.env.MAIN_API_URL || 'http://localhost:5000/api/v1';
+            const uploadResponse = await axios.post(`${mainApiUrl}/uploads/audio`, {
+              audio: audioBuffer.toString('base64'),
+              filename: `bot-answer-${sessionId}-${Date.now()}.wav`
+            }, {
+              headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (uploadResponse.data?.success) {
+              const audioUrl = uploadResponse.data.audioUrl;
+              
+              // Create answer in main database
+              const answerResponse = await axios.post(`${mainApiUrl}/answers`, {
+                interview: sessionId, // This should be the actual interview ID
+                question: currentQuestion.id,
+                audioUrl: audioUrl,
+                transcript: transcript,
+                participantId: data.participantId
+              });
+              
+              if (answerResponse.data?.success) {
+                console.log(`Answer saved to main database for session ${sessionId}`);
+              }
+            }
+          } catch (error) {
+            console.error('Error saving answer to main database:', error);
+          }
+        }
+        
+        // Notify admin that answer was received
+        broadcast(sessionId, { 
+          type: 'ANSWER_STORED', 
+          questionIndex: currentQuestionIndex,
+          participantId: data.participantId,
+          transcript: transcript
+        });
+      } else if (data.type === 'BOT_READY') {
+        // Bot has joined the room and is ready
+        broadcast(sessionId, { type: 'BOT_READY' });
+      } else if (data.type === 'SPEECH_STARTED') {
+        // Bot started speaking
+        broadcast(sessionId, { type: 'SPEECH_STARTED' });
+      } else if (data.type === 'SPEECH_ENDED') {
+        // Bot finished speaking
+        broadcast(sessionId, { type: 'SPEECH_ENDED' });
+      }
+    } catch (error) {
+      console.error('Error parsing WebSocket message:', error);
+    }
   });
 });
 

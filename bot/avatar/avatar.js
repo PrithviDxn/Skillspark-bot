@@ -19,6 +19,8 @@ function log(message) {
 let ws = null;
 let room = null;
 let hasJoinedRoom = false;
+let isSpeaking = false;
+let isInterviewActive = false;
 
 // --- Web Audio API setup for TTS streaming ---
 let audioContext = null;
@@ -39,20 +41,46 @@ function speakQuestionToRoom(text) {
         log('TTS not supported in this browser.');
         return;
     }
+    
+    if (!isInterviewActive) {
+        log('Interview not active, not speaking.');
+        return;
+    }
+    
     setupTTSStream();
+    
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
+    
     // Create utterance
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
     utterance.rate = 1;
     utterance.pitch = 1;
+    
     // Connect TTS to Web Audio API
     const source = audioContext.createMediaStreamSource(ttsDestination.stream);
     source.connect(audioContext.destination);
-    // Use SpeechSynthesisUtterance events to log
-    utterance.onstart = () => log('Bot speaking: ' + text);
-    utterance.onend = () => log('Bot finished speaking.');
+    
+    // Use SpeechSynthesisUtterance events to log and control animation
+    utterance.onstart = () => {
+        log('Bot speaking: ' + text);
+        isSpeaking = true;
+        // Notify backend that speech started
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'SPEECH_STARTED' }));
+        }
+    };
+    
+    utterance.onend = () => {
+        log('Bot finished speaking.');
+        isSpeaking = false;
+        // Notify backend that speech ended
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'SPEECH_ENDED' }));
+        }
+    };
+    
     // Use the browser's default output, but also route to Twilio
     window.speechSynthesis.speak(utterance);
 }
@@ -68,6 +96,7 @@ function connectWebSocket() {
         log('WebSocket connected');
         statusEl.textContent = 'Connected';
         statusEl.className = 'connected';
+        
         // Join the room ONCE after WebSocket connects
         if (!hasJoinedRoom) {
             await joinRoom();
@@ -79,12 +108,31 @@ function connectWebSocket() {
         const data = JSON.parse(event.data);
         log(`Received: ${JSON.stringify(data)}`);
 
-        if (data.type === 'START') {
-            log('START received: Ready to ask question or trigger TTS.');
-        } else if (data.type === 'QUESTION') {
-            log(`Question: ${data.question}`);
-            // --- TTS: Speak the question aloud and route to Twilio ---
+        if (data.type === 'START_INTERVIEW') {
+            log('Interview started!');
+            isInterviewActive = true;
+            if (data.question) {
+                speakQuestionToRoom(data.question);
+            }
+        } else if (data.type === 'NEXT_QUESTION') {
+            log(`Next question: ${data.question}`);
             speakQuestionToRoom(data.question);
+        } else if (data.type === 'PAUSE') {
+            log('Interview paused');
+            isInterviewActive = false;
+            window.speechSynthesis.pause();
+        } else if (data.type === 'RESUME') {
+            log('Interview resumed');
+            isInterviewActive = true;
+            window.speechSynthesis.resume();
+        } else if (data.type === 'STOP') {
+            log('Interview stopped');
+            isInterviewActive = false;
+            window.speechSynthesis.cancel();
+        } else if (data.type === 'END') {
+            log('Interview ended - no more questions');
+            isInterviewActive = false;
+            window.speechSynthesis.cancel();
         }
     };
 
@@ -113,12 +161,14 @@ function createVideoTrack() {
 
     function drawAvatar() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
         // Face
         ctx.beginPath();
         ctx.arc(320, 240, 150, 0, 2 * Math.PI);
         ctx.fillStyle = '#ffe0b2';
         ctx.fill();
         ctx.closePath();
+        
         // Eyes
         ctx.beginPath();
         ctx.arc(270, 210, 20, 0, 2 * Math.PI);
@@ -126,6 +176,7 @@ function createVideoTrack() {
         ctx.fillStyle = blink ? '#ffe0b2' : '#222';
         ctx.fill();
         ctx.closePath();
+        
         // Pupils
         if (!blink) {
             ctx.beginPath();
@@ -135,8 +186,17 @@ function createVideoTrack() {
             ctx.fill();
             ctx.closePath();
         }
-        // Mouth
+        
+        // Mouth - only animate when speaking
         ctx.beginPath();
+        if (isSpeaking) {
+            // Animate mouth when speaking
+            if (frame % 10 === 0) mouthOpen = !mouthOpen;
+        } else {
+            // Keep mouth closed when not speaking
+            mouthOpen = false;
+        }
+        
         if (mouthOpen) {
             ctx.ellipse(320, 300, 40, 30, 0, 0, Math.PI * 2);
         } else {
@@ -145,6 +205,7 @@ function createVideoTrack() {
         ctx.fillStyle = '#d84315';
         ctx.fill();
         ctx.closePath();
+        
         // Blush
         ctx.beginPath();
         ctx.ellipse(240, 270, 18, 8, 0, 0, Math.PI * 2);
@@ -159,8 +220,7 @@ function createVideoTrack() {
         // Blink every ~2 seconds
         if (frame % 60 === 0) blink = true;
         if (frame % 65 === 0) blink = false;
-        // Mouth moves every 30 frames
-        if (frame % 30 === 0) mouthOpen = !mouthOpen;
+        
         drawAvatar();
         requestAnimationFrame(animate);
     }
@@ -180,6 +240,119 @@ function createSilentAudioTrack() {
     oscillator.frequency.value = 0; // Silent
     const track = dst.stream.getAudioTracks()[0];
     return track;
+}
+
+// Function to capture and process candidate answers
+function setupAnswerCapture() {
+    if (!room) return;
+    
+    // Listen to all participants except the bot
+    room.participants.forEach(participant => {
+        if (participant.identity !== 'AI Interviewer') {
+            setupParticipantAudioCapture(participant);
+        }
+    });
+    
+    // Listen for new participants
+    room.on('participantConnected', participant => {
+        log(`Participant connected: ${participant.identity}`);
+        if (participant.identity !== 'AI Interviewer') {
+            setupParticipantAudioCapture(participant);
+        }
+    });
+}
+
+function setupParticipantAudioCapture(participant) {
+    // Listen for audio tracks from this participant
+    participant.on('trackSubscribed', track => {
+        if (track.kind === 'audio') {
+            log(`Listening to audio from ${participant.identity}`);
+            
+            // Create a MediaRecorder to capture audio
+            const mediaRecorder = new MediaRecorder(track.mediaStreamTrack);
+            let audioChunks = [];
+            let isRecording = false;
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+            
+            mediaRecorder.onstart = () => {
+                log(`Started recording ${participant.identity}`);
+                isRecording = true;
+            };
+            
+            mediaRecorder.onstop = async () => {
+                log(`Stopped recording ${participant.identity}`);
+                isRecording = false;
+                
+                // Create audio blob
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                audioChunks = [];
+                
+                log(`Captured ${audioBlob.size} bytes of audio from ${participant.identity}`);
+                
+                // Convert audio blob to base64 for WebSocket transmission
+                const base64Audio = await blobToBase64(audioBlob);
+                
+                // Try to transcribe the audio (placeholder for now)
+                let transcript = '';
+                try {
+                    // In production, you'd send this to a transcription service
+                    // For now, we'll use a placeholder
+                    transcript = `Audio captured from ${participant.identity} (${audioBlob.size} bytes)`;
+                    
+                    // TODO: Integrate with OpenAI Whisper or similar service
+                    // const transcriptionResponse = await fetch('/api/transcribe', {
+                    //     method: 'POST',
+                    //     body: audioBlob
+                    // });
+                    // const transcriptionData = await transcriptionResponse.json();
+                    // transcript = transcriptionData.transcript;
+                } catch (error) {
+                    console.error('Transcription error:', error);
+                    transcript = `Audio captured from ${participant.identity} (transcription failed)`;
+                }
+                
+                // Send to backend
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'ANSWER_RECEIVED',
+                        participantId: participant.identity,
+                        answer: transcript,
+                        audioBlob: base64Audio,
+                        transcript: transcript
+                    }));
+                }
+            };
+            
+            // Start recording when participant speaks (simplified - just record continuously for now)
+            // In production, you'd use voice activity detection
+            mediaRecorder.start(1000); // Record in 1-second chunks
+            
+            // Stop recording after 30 seconds (simplified approach)
+            setTimeout(() => {
+                if (isRecording) {
+                    mediaRecorder.stop();
+                }
+            }, 30000);
+        }
+    });
+}
+
+// Helper function to convert blob to base64
+function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1]; // Remove data URL prefix
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
 }
 
 // Join Twilio Video Room
@@ -227,6 +400,14 @@ async function joinRoom() {
         room.localParticipant.videoTracks.forEach(publication => {
             publication.track.attach(localVideo);
         });
+
+        // Setup answer capture
+        setupAnswerCapture();
+        
+        // Notify backend that bot is ready
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'BOT_READY' }));
+        }
 
     } catch (error) {
         log(`Error joining room: ${error.message}`);
