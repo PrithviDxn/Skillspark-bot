@@ -10,6 +10,7 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const TranscriptionService = require('./transcription-service');
+const OpenAI = require('openai');
 
 // Placeholder for Twilio, OpenAI, and other integrations
 // const twilio = require('twilio');
@@ -21,6 +22,7 @@ const wss = new Server({ server });
 
 // Initialize transcription service
 const transcriptionService = new TranscriptionService();
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Simple logging function
 function log(message) {
@@ -57,7 +59,7 @@ app.use('/avatar', express.static(path.join(__dirname, 'avatar')));
 const sessions = {};
 
 // --- REST API ---
-app.post('/api/bot/:sessionId/start', (req, res) => {
+app.post('/api/bot/:sessionId/start', async (req, res) => {
   const { sessionId } = req.params;
   sessions[sessionId] = sessions[sessionId] || { status: 'inactive', questions: [], current: 0 };
   sessions[sessionId].status = 'active';
@@ -68,7 +70,24 @@ app.post('/api/bot/:sessionId/start', (req, res) => {
   if (sessions[sessionId].questions && sessions[sessionId].questions.length > 0) {
     const question = sessions[sessionId].questions[0];
     log(`Sending first question: "${question.text}"`);
-    broadcast(sessionId, { type: 'START_INTERVIEW', question: question.text });
+    // Call TTS endpoint to generate and broadcast audio
+    try {
+      const ttsRes = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: "alloy",
+        input: question.text,
+      });
+      const buffer = Buffer.from(await ttsRes.arrayBuffer());
+      broadcast(sessionId, {
+        type: 'TTS_AUDIO',
+        audioData: buffer.toString('base64'),
+        mimeType: 'audio/mp3',
+        text: question.text,
+      });
+    } catch (err) {
+      log(`TTS error: ${err.message}`);
+      broadcast(sessionId, { type: 'START_INTERVIEW', question: question.text });
+    }
   } else {
     log(`No questions available for session ${sessionId}`);
     broadcast(sessionId, { type: 'START_INTERVIEW' });
@@ -120,10 +139,8 @@ app.post('/api/bot/:sessionId/set-techstack', async (req, res) => {
     sessions[sessionId].questions = questions;
     sessions[sessionId].current = 0;
     sessions[sessionId].techStackId = techStackId;
-    
-    // Don't automatically start the interview - just load the questions
+    // Do NOT broadcast or start the interview here!
     log(`Loaded ${questions.length} questions for tech stack ${techStackId}`);
-    
     res.json({ success: true, count: questions.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -339,6 +356,33 @@ function getNextQuestion(sessionId) {
   const idx = sessions[sessionId]?.current || 0;
   return q[idx] || null;
 }
+
+// Server-side TTS endpoint
+app.post('/api/bot/:sessionId/tts', async (req, res) => {
+  const { sessionId } = req.params;
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'text required' });
+  try {
+    // Generate TTS audio with OpenAI
+    const mp3 = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: "alloy",
+      input: text,
+    });
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    // Broadcast to all clients in the session
+    broadcast(sessionId, {
+      type: 'TTS_AUDIO',
+      audioData: buffer.toString('base64'),
+      mimeType: 'audio/mp3',
+      text,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('TTS error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // --- Start Server ---
 const PORT = process.env.PORT || 5001;
