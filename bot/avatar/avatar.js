@@ -7,6 +7,8 @@ const roomName = urlParams.get('room');
 const statusEl = document.getElementById('status');
 const logEl = document.getElementById('log');
 const localVideo = document.getElementById('local-video');
+const testAudioBtn = document.getElementById('test-audio');
+const testTTSBtn = document.getElementById('test-tts');
 
 // Logging function
 function log(message) {
@@ -21,17 +23,36 @@ let room = null;
 let hasJoinedRoom = false;
 let isSpeaking = false;
 let isInterviewActive = false;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
 
 // --- Web Audio API setup for TTS streaming ---
 let audioContext = null;
 let ttsDestination = null;
 let ttsAudioTrack = null;
+let ttsSource = null;
+let audioGainNode = null;
 
 function setupTTSStream() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         ttsDestination = audioContext.createMediaStreamDestination();
         ttsAudioTrack = ttsDestination.stream.getAudioTracks()[0];
+        
+        // Create a gain node to control audio output
+        audioGainNode = audioContext.createGain();
+        audioGainNode.gain.value = 0.8; // Set volume to 80%
+        audioGainNode.connect(ttsDestination);
+        
+        // Create a silent oscillator to keep the track active
+        const silentOscillator = audioContext.createOscillator();
+        const silentGainNode = audioContext.createGain();
+        silentGainNode.gain.value = 0; // Silent
+        silentOscillator.connect(silentGainNode);
+        silentGainNode.connect(ttsDestination);
+        silentOscillator.start();
+        
+        log('TTS audio stream setup complete');
     }
 }
 
@@ -55,17 +76,49 @@ function speakQuestionToRoom(text) {
     // Create utterance
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
-    utterance.rate = 1;
+    utterance.rate = 0.9; // Slightly slower for clarity
     utterance.pitch = 1;
-    
-    // Connect TTS to Web Audio API
-    const source = audioContext.createMediaStreamSource(ttsDestination.stream);
-    source.connect(audioContext.destination);
+    utterance.volume = 1;
     
     // Use SpeechSynthesisUtterance events to log and control animation
     utterance.onstart = () => {
         log('Bot speaking: ' + text);
         isSpeaking = true;
+        
+        // Create audio feedback for Twilio - generate tones for each word
+        const words = text.split(' ');
+        let wordIndex = 0;
+        
+        const speakNextWord = () => {
+            if (wordIndex < words.length && isSpeaking) {
+                // Create a brief tone for each word
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                // Vary frequency slightly for each word to make it more natural
+                const baseFreq = 440; // A4
+                const freq = baseFreq + (wordIndex * 10) % 100;
+                oscillator.frequency.value = freq;
+                
+                gainNode.gain.value = 0.2; // Lower volume for Twilio
+                gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioGainNode);
+                
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.1);
+                
+                wordIndex++;
+                // Schedule next word
+                setTimeout(speakNextWord, 200 + Math.random() * 100);
+            }
+        };
+        
+        // Start speaking words
+        setTimeout(speakNextWord, 100);
+        
         // Notify backend that speech started
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'SPEECH_STARTED' }));
@@ -81,11 +134,11 @@ function speakQuestionToRoom(text) {
         }
     };
     
-    // Use the browser's default output, but also route to Twilio
+    // Use the browser's default output for local audio
     window.speechSynthesis.speak(utterance);
 }
 
-// Connect to WebSocket
+// Connect to WebSocket with improved reconnection logic
 function connectWebSocket() {
     // Use wss:// if the page is loaded over HTTPS, otherwise ws://
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -96,6 +149,7 @@ function connectWebSocket() {
         log('WebSocket connected');
         statusEl.textContent = 'Connected';
         statusEl.className = 'connected';
+        reconnectAttempts = 0; // Reset reconnect attempts on successful connection
         
         // Join the room ONCE after WebSocket connects
         if (!hasJoinedRoom) {
@@ -136,12 +190,20 @@ function connectWebSocket() {
         }
     };
 
-    ws.onclose = () => {
-        log('WebSocket disconnected');
+    ws.onclose = (event) => {
+        log(`WebSocket disconnected (code: ${event.code}, reason: ${event.reason})`);
         statusEl.textContent = 'Disconnected';
         statusEl.className = 'disconnected';
-        // Try to reconnect after 5 seconds
-        setTimeout(connectWebSocket, 5000);
+        
+        // Only attempt reconnection if it wasn't a clean close and we haven't exceeded max attempts
+        if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Exponential backoff, max 30s
+            log(`Attempting to reconnect in ${delay/1000} seconds (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+            setTimeout(connectWebSocket, delay);
+        } else if (reconnectAttempts >= maxReconnectAttempts) {
+            log('Max reconnection attempts reached. Please refresh the page.');
+        }
     };
 
     ws.onerror = (error) => {
@@ -158,6 +220,8 @@ function createVideoTrack() {
     let blink = false;
     let mouthOpen = false;
     let frame = 0;
+    let lastBlinkTime = 0;
+    let blinkDuration = 0;
 
     function drawAvatar() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -217,29 +281,33 @@ function createVideoTrack() {
 
     function animate() {
         frame++;
-        // Blink every ~2 seconds
-        if (frame % 60 === 0) blink = true;
-        if (frame % 65 === 0) blink = false;
+        const currentTime = Date.now();
+        
+        // Improved blinking logic - more natural timing
+        if (!blink && currentTime - lastBlinkTime > 2000 + Math.random() * 3000) {
+            blink = true;
+            blinkDuration = 150 + Math.random() * 100; // 150-250ms blink
+            lastBlinkTime = currentTime;
+        } else if (blink && currentTime - lastBlinkTime > blinkDuration) {
+            blink = false;
+        }
         
         drawAvatar();
         requestAnimationFrame(animate);
     }
+    
+    // Start animation immediately
     animate();
+    
     const stream = canvas.captureStream(30); // 30 FPS
     const videoTrack = stream.getVideoTracks()[0];
     return videoTrack;
 }
 
-// Create a synthetic audio track (silent MediaStreamTrack)
-function createSilentAudioTrack() {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = ctx.createOscillator();
-    const dst = ctx.createMediaStreamDestination();
-    oscillator.connect(dst);
-    oscillator.start();
-    oscillator.frequency.value = 0; // Silent
-    const track = dst.stream.getAudioTracks()[0];
-    return track;
+// Create a proper audio track for Twilio
+function createAudioTrack() {
+    setupTTSStream();
+    return ttsAudioTrack;
 }
 
 // Function to capture and process candidate answers
@@ -375,9 +443,8 @@ async function joinRoom() {
 
         // Create synthetic video track
         const videoTrack = createVideoTrack();
-        // --- Use TTS audio track for Twilio ---
-        setupTTSStream();
-        const audioTrack = ttsAudioTrack;
+        // Create proper audio track for Twilio
+        const audioTrack = createAudioTrack();
 
         // Connect to room with synthetic tracks
         room = await Twilio.Video.connect(token, {
@@ -418,7 +485,82 @@ async function joinRoom() {
 if (sessionId && roomName) {
     log(`Starting bot for session: ${sessionId}, room: ${roomName}`);
     connectWebSocket();
+    
+    // Add event listeners for test buttons
+    testAudioBtn.addEventListener('click', testAudio);
+    testTTSBtn.addEventListener('click', testTTS);
+    
+    // Handle page visibility changes to maintain WebSocket connection
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            log('Page hidden - maintaining connection');
+        } else {
+            log('Page visible - checking connection');
+            // Check if WebSocket is still connected
+            if (ws && ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket not connected, attempting to reconnect');
+                connectWebSocket();
+            }
+        }
+    });
+    
+    // Handle page focus/blur events
+    window.addEventListener('focus', () => {
+        log('Page focused');
+    });
+    
+    window.addEventListener('blur', () => {
+        log('Page blurred');
+    });
+    
+    // Keep the page alive and prevent sleep
+    let keepAliveInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            // Send a ping to keep the connection alive
+            ws.send(JSON.stringify({ type: 'PING' }));
+        }
+    }, 30000); // Every 30 seconds
+    
+    // Clean up interval on page unload
+    window.addEventListener('beforeunload', () => {
+        clearInterval(keepAliveInterval);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close(1000, 'Page unload');
+        }
+    });
+    
 } else {
     log('Error: Missing sessionId or room parameters');
     statusEl.textContent = 'Error: Missing Parameters';
+}
+
+// Test functions
+function testAudio() {
+    if (!audioContext) {
+        setupTTSStream();
+    }
+    
+    log('Testing audio output...');
+    
+    // Create a test tone
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.frequency.value = 440; // A4 note
+    gainNode.gain.value = 0.3;
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioGainNode);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 1);
+    
+    log('Audio test complete - you should hear a 1-second tone');
+}
+
+function testTTS() {
+    log('Testing TTS...');
+    speakQuestionToRoom('This is a test of the text to speech system. Can you hear me?');
 } 

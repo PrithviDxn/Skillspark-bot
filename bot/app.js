@@ -296,6 +296,9 @@ wss.on('connection', (ws, req) => {
       } else if (data.type === 'SPEECH_ENDED') {
         // Bot finished speaking
         broadcast(sessionId, { type: 'SPEECH_ENDED' });
+      } else if (data.type === 'PING') {
+        // Respond to ping to keep connection alive
+        ws.send(JSON.stringify({ type: 'PONG' }));
       }
     } catch (error) {
       console.error('Error parsing WebSocket message:', error);

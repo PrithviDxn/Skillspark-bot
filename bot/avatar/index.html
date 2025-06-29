@@ -23,8 +23,8 @@
         #video-container {
             width: 100%;
             max-width: 640px;
-            margin: 20px auto;
-        }
+                margin: 20px auto;
+            }
         video {
             width: 100%;
             border-radius: 8px;
@@ -43,6 +43,10 @@
     <div id="status" class="disconnected">Disconnected</div>
     <div id="video-container">
         <video id="local-video" autoplay playsinline></video>
+    </div>
+    <div style="margin: 20px 0;">
+        <button id="test-audio" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Test Audio</button>
+        <button id="test-tts" style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">Test TTS</button>
     </div>
     <div id="log"></div>
     <script src="avatar.js"></script>
