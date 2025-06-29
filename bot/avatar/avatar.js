@@ -166,7 +166,10 @@ function connectWebSocket() {
             log('Interview started!');
             isInterviewActive = true;
             if (data.question) {
+                log(`Speaking question: "${data.question}"`);
                 speakQuestionToRoom(data.question);
+            } else {
+                log('No question provided in START_INTERVIEW');
             }
         } else if (data.type === 'NEXT_QUESTION') {
             log(`Next question: ${data.question}`);
@@ -222,6 +225,8 @@ function createVideoTrack() {
     let frame = 0;
     let lastBlinkTime = 0;
     let blinkDuration = 0;
+    let animationId = null;
+    let lastFrameTime = 0;
 
     function drawAvatar() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -279,28 +284,95 @@ function createVideoTrack() {
         ctx.closePath();
     }
 
-    function animate() {
-        frame++;
-        const currentTime = Date.now();
+    function animate(currentTime) {
+        // Use time-based animation instead of frame-based for better performance
+        if (!lastFrameTime) lastFrameTime = currentTime;
+        const deltaTime = currentTime - lastFrameTime;
         
-        // Improved blinking logic - more natural timing
-        if (!blink && currentTime - lastBlinkTime > 2000 + Math.random() * 3000) {
-            blink = true;
-            blinkDuration = 150 + Math.random() * 100; // 150-250ms blink
-            lastBlinkTime = currentTime;
-        } else if (blink && currentTime - lastBlinkTime > blinkDuration) {
-            blink = false;
+        // Update frame counter (30 FPS target)
+        if (deltaTime >= 33) { // 1000ms / 30fps ≈ 33ms
+            frame++;
+            lastFrameTime = currentTime;
+            
+            // Improved blinking logic - more natural timing
+            if (!blink && currentTime - lastBlinkTime > 2000 + Math.random() * 3000) {
+                blink = true;
+                blinkDuration = 150 + Math.random() * 100; // 150-250ms blink
+                lastBlinkTime = currentTime;
+            } else if (blink && currentTime - lastBlinkTime > blinkDuration) {
+                blink = false;
+            }
         }
         
         drawAvatar();
-        requestAnimationFrame(animate);
+        animationId = requestAnimationFrame(animate);
     }
     
     // Start animation immediately
-    animate();
+    animationId = requestAnimationFrame(animate);
+    
+    // Fallback animation using setInterval for when page is not focused
+    let fallbackInterval = null;
+    
+    function startFallbackAnimation() {
+        if (!fallbackInterval) {
+            fallbackInterval = setInterval(() => {
+                frame++;
+                const currentTime = Date.now();
+                
+                // Blinking logic for fallback
+                if (!blink && currentTime - lastBlinkTime > 2000 + Math.random() * 3000) {
+                    blink = true;
+                    blinkDuration = 150 + Math.random() * 100;
+                    lastBlinkTime = currentTime;
+                } else if (blink && currentTime - lastBlinkTime > blinkDuration) {
+                    blink = false;
+                }
+                
+                drawAvatar();
+            }, 33); // ~30 FPS
+        }
+    }
+    
+    function stopFallbackAnimation() {
+        if (fallbackInterval) {
+            clearInterval(fallbackInterval);
+            fallbackInterval = null;
+        }
+    }
+    
+    // Ensure animation continues even when page is not focused
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            // Page is hidden, switch to fallback animation
+            log('Page hidden - switching to fallback animation');
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            startFallbackAnimation();
+        } else {
+            // Page is visible again, switch back to requestAnimationFrame
+            log('Page visible - switching back to main animation');
+            stopFallbackAnimation();
+            if (!animationId) {
+                animationId = requestAnimationFrame(animate);
+            }
+        }
+    });
     
     const stream = canvas.captureStream(30); // 30 FPS
     const videoTrack = stream.getVideoTracks()[0];
+    
+    // Add cleanup function to stop animation when needed
+    videoTrack.stop = function() {
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+        stopFallbackAnimation();
+    };
+    
     return videoTrack;
 }
 

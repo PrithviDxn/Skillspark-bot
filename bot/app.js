@@ -59,7 +59,7 @@ app.post('/api/bot/:sessionId/start', (req, res) => {
   // Send first question if available and interview is starting
   if (sessions[sessionId].questions && sessions[sessionId].questions.length > 0) {
     const question = sessions[sessionId].questions[0];
-    broadcast(sessionId, { type: 'START_INTERVIEW', question });
+    broadcast(sessionId, { type: 'START_INTERVIEW', question: question.text });
   } else {
     broadcast(sessionId, { type: 'START_INTERVIEW' });
   }
