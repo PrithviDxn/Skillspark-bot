@@ -9,6 +9,7 @@ const logEl = document.getElementById('log');
 const localVideo = document.getElementById('local-video');
 const testAudioBtn = document.getElementById('test-audio');
 const testTTSBtn = document.getElementById('test-tts');
+const testTTSTwilioBtn = document.getElementById('test-tts-twilio');
 
 // Logging function
 function log(message) {
@@ -35,6 +36,7 @@ let audioGainNode = null;
 
 function setupTTSStream() {
     if (!audioContext) {
+        log('Creating new audio context...');
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         ttsDestination = audioContext.createMediaStreamDestination();
         ttsAudioTrack = ttsDestination.stream.getAudioTracks()[0];
@@ -53,11 +55,19 @@ function setupTTSStream() {
         silentOscillator.start();
         
         log('TTS audio stream setup complete');
+        log(`Audio context state: ${audioContext.state}`);
+        log(`TTS track enabled: ${ttsAudioTrack.enabled}`);
+    } else {
+        log('TTS stream already setup');
+        log(`Audio context state: ${audioContext.state}`);
     }
 }
 
 // --- TTS function that routes audio to the MediaStreamDestination ---
 function speakQuestionToRoom(text) {
+    log(`speakQuestionToRoom called with: "${text}"`);
+    log(`isInterviewActive: ${isInterviewActive}`);
+    
     if (!('speechSynthesis' in window)) {
         log('TTS not supported in this browser.');
         return;
@@ -68,6 +78,7 @@ function speakQuestionToRoom(text) {
         return;
     }
     
+    log('Setting up TTS stream...');
     setupTTSStream();
     
     // Cancel any ongoing speech
@@ -80,6 +91,8 @@ function speakQuestionToRoom(text) {
     utterance.pitch = 1;
     utterance.volume = 1;
     
+    log('Created utterance, setting up event handlers...');
+    
     // Use SpeechSynthesisUtterance events to log and control animation
     utterance.onstart = () => {
         log('Bot speaking: ' + text);
@@ -87,6 +100,7 @@ function speakQuestionToRoom(text) {
         
         // Only generate audio tones for actual interview questions, not test audio
         if (isInterviewActive && text.length > 10) { // Only for longer text (questions)
+            log('Generating audio tones for Twilio...');
             // Create audio feedback for Twilio - generate tones for each word
             const words = text.split(' ');
             let wordIndex = 0;
@@ -137,6 +151,11 @@ function speakQuestionToRoom(text) {
         }
     };
     
+    utterance.onerror = (event) => {
+        log(`TTS error: ${event.error}`);
+    };
+    
+    log('Starting speech synthesis...');
     // Use the browser's default output for local audio
     window.speechSynthesis.speak(utterance);
 }
@@ -170,12 +189,16 @@ function connectWebSocket() {
             isInterviewActive = true;
             if (data.question) {
                 log(`Speaking question: "${data.question}"`);
+                // Force the interview to be active before speaking
+                isInterviewActive = true;
                 speakQuestionToRoom(data.question);
             } else {
                 log('No question provided in START_INTERVIEW');
             }
         } else if (data.type === 'NEXT_QUESTION') {
             log(`Next question: ${data.question}`);
+            // Ensure interview is active for next questions too
+            isInterviewActive = true;
             speakQuestionToRoom(data.question);
         } else if (data.type === 'PAUSE') {
             log('Interview paused');
@@ -564,6 +587,7 @@ if (sessionId && roomName) {
     // Add event listeners for test buttons
     testAudioBtn.addEventListener('click', testAudio);
     testTTSBtn.addEventListener('click', testTTS);
+    testTTSTwilioBtn.addEventListener('click', testTTSWithTwilio);
     
     // Handle page visibility changes to maintain WebSocket connection
     document.addEventListener('visibilitychange', () => {
@@ -664,4 +688,19 @@ function testTTS() {
     
     // Use browser's default output for test (no Twilio audio)
     window.speechSynthesis.speak(testUtterance);
+}
+
+function testTTSWithTwilio() {
+    log('Testing TTS with Twilio audio...');
+    
+    // Temporarily activate interview mode for testing
+    const wasActive = isInterviewActive;
+    isInterviewActive = true;
+    
+    speakQuestionToRoom('This is a test question with Twilio audio routing.');
+    
+    // Restore previous state after a delay
+    setTimeout(() => {
+        isInterviewActive = wasActive;
+    }, 5000);
 } 
