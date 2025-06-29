@@ -61,6 +61,16 @@ function setupTTSStream() {
         log('TTS stream already setup');
         log(`Audio context state: ${audioContext.state}`);
     }
+    
+    // Resume audio context if it's suspended
+    if (audioContext.state === 'suspended') {
+        log('Resuming suspended audio context...');
+        audioContext.resume().then(() => {
+            log(`Audio context resumed, state: ${audioContext.state}`);
+        }).catch(error => {
+            log(`Failed to resume audio context: ${error}`);
+        });
+    }
 }
 
 // --- TTS function that routes audio to the MediaStreamDestination ---
@@ -80,6 +90,19 @@ function speakQuestionToRoom(text) {
     
     log('Setting up TTS stream...');
     setupTTSStream();
+    
+    // Ensure audio context is running
+    if (audioContext.state === 'suspended') {
+        log('Audio context suspended, attempting to resume...');
+        audioContext.resume().then(() => {
+            log(`Audio context resumed, state: ${audioContext.state}`);
+            // Try speaking again after resume
+            setTimeout(() => speakQuestionToRoom(text), 100);
+        }).catch(error => {
+            log(`Failed to resume audio context: ${error}`);
+        });
+        return;
+    }
     
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
@@ -153,6 +176,13 @@ function speakQuestionToRoom(text) {
     
     utterance.onerror = (event) => {
         log(`TTS error: ${event.error}`);
+        // If it's a not-allowed error, try to resume audio context and retry
+        if (event.error === 'not-allowed' && audioContext.state === 'suspended') {
+            log('Attempting to resume audio context and retry...');
+            audioContext.resume().then(() => {
+                setTimeout(() => speakQuestionToRoom(text), 500);
+            });
+        }
     };
     
     log('Starting speech synthesis...');
@@ -588,6 +618,28 @@ if (sessionId && roomName) {
     testAudioBtn.addEventListener('click', testAudio);
     testTTSBtn.addEventListener('click', testTTS);
     testTTSTwilioBtn.addEventListener('click', testTTSWithTwilio);
+    
+    // Handle user interactions to activate audio context
+    function activateAudioContext() {
+        if (audioContext && audioContext.state === 'suspended') {
+            log('Activating audio context on user interaction...');
+            audioContext.resume().then(() => {
+                log(`Audio context activated, state: ${audioContext.state}`);
+            });
+        }
+    }
+    
+    // Listen for user interactions to activate audio
+    document.addEventListener('click', activateAudioContext);
+    document.addEventListener('keydown', activateAudioContext);
+    document.addEventListener('touchstart', activateAudioContext);
+    
+    // Also activate when the page becomes visible
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            setTimeout(activateAudioContext, 100);
+        }
+    });
     
     // Handle page visibility changes to maintain WebSocket connection
     document.addEventListener('visibilitychange', () => {
