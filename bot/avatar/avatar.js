@@ -85,39 +85,42 @@ function speakQuestionToRoom(text) {
         log('Bot speaking: ' + text);
         isSpeaking = true;
         
-        // Create audio feedback for Twilio - generate tones for each word
-        const words = text.split(' ');
-        let wordIndex = 0;
-        
-        const speakNextWord = () => {
-            if (wordIndex < words.length && isSpeaking) {
-                // Create a brief tone for each word
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                // Vary frequency slightly for each word to make it more natural
-                const baseFreq = 440; // A4
-                const freq = baseFreq + (wordIndex * 10) % 100;
-                oscillator.frequency.value = freq;
-                
-                gainNode.gain.value = 0.2; // Lower volume for Twilio
-                gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioGainNode);
-                
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 0.1);
-                
-                wordIndex++;
-                // Schedule next word
-                setTimeout(speakNextWord, 200 + Math.random() * 100);
-            }
-        };
-        
-        // Start speaking words
-        setTimeout(speakNextWord, 100);
+        // Only generate audio tones for actual interview questions, not test audio
+        if (isInterviewActive && text.length > 10) { // Only for longer text (questions)
+            // Create audio feedback for Twilio - generate tones for each word
+            const words = text.split(' ');
+            let wordIndex = 0;
+            
+            const speakNextWord = () => {
+                if (wordIndex < words.length && isSpeaking && isInterviewActive) {
+                    // Create a brief tone for each word
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    // Vary frequency slightly for each word to make it more natural
+                    const baseFreq = 440; // A4
+                    const freq = baseFreq + (wordIndex * 10) % 100;
+                    oscillator.frequency.value = freq;
+                    
+                    gainNode.gain.value = 0.2; // Lower volume for Twilio
+                    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioGainNode);
+                    
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.1);
+                    
+                    wordIndex++;
+                    // Schedule next word
+                    setTimeout(speakNextWord, 200 + Math.random() * 100);
+                }
+            };
+            
+            // Start speaking words
+            setTimeout(speakNextWord, 100);
+        }
         
         // Notify backend that speech started
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -634,5 +637,31 @@ function testAudio() {
 
 function testTTS() {
     log('Testing TTS...');
-    speakQuestionToRoom('This is a test of the text to speech system. Can you hear me?');
+    
+    // Use a separate TTS instance for testing that doesn't interfere with interview
+    if (!('speechSynthesis' in window)) {
+        log('TTS not supported in this browser.');
+        return;
+    }
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    // Create test utterance
+    const testUtterance = new SpeechSynthesisUtterance('This is a test of the text to speech system. Can you hear me?');
+    testUtterance.lang = 'en-US';
+    testUtterance.rate = 0.9;
+    testUtterance.pitch = 1;
+    testUtterance.volume = 1;
+    
+    testUtterance.onstart = () => {
+        log('Test TTS started');
+    };
+    
+    testUtterance.onend = () => {
+        log('Test TTS finished');
+    };
+    
+    // Use browser's default output for test (no Twilio audio)
+    window.speechSynthesis.speak(testUtterance);
 } 

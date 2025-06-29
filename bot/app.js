@@ -22,6 +22,12 @@ const wss = new Server({ server });
 // Initialize transcription service
 const transcriptionService = new TranscriptionService();
 
+// Simple logging function
+function log(message) {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`[${timestamp}] ${message}`);
+}
+
 app.use(bodyParser.json());
 app.use(cors({
   origin: function (origin, callback) {
@@ -56,11 +62,15 @@ app.post('/api/bot/:sessionId/start', (req, res) => {
   sessions[sessionId] = sessions[sessionId] || { status: 'inactive', questions: [], current: 0 };
   sessions[sessionId].status = 'active';
   
+  log(`Starting interview for session ${sessionId}`);
+  
   // Send first question if available and interview is starting
   if (sessions[sessionId].questions && sessions[sessionId].questions.length > 0) {
     const question = sessions[sessionId].questions[0];
+    log(`Sending first question: "${question.text}"`);
     broadcast(sessionId, { type: 'START_INTERVIEW', question: question.text });
   } else {
+    log(`No questions available for session ${sessionId}`);
     broadcast(sessionId, { type: 'START_INTERVIEW' });
   }
   
@@ -110,6 +120,10 @@ app.post('/api/bot/:sessionId/set-techstack', async (req, res) => {
     sessions[sessionId].questions = questions;
     sessions[sessionId].current = 0;
     sessions[sessionId].techStackId = techStackId;
+    
+    // Don't automatically start the interview - just load the questions
+    log(`Loaded ${questions.length} questions for tech stack ${techStackId}`);
+    
     res.json({ success: true, count: questions.length });
   } catch (err) {
     res.status(500).json({ error: err.message });

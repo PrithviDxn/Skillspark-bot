@@ -6,6 +6,8 @@
 2. **Eyes stop blinking**: Improved WebSocket connection stability with reconnection logic and page visibility handling
 3. **"object Object" instead of question text**: Fixed question data structure consistency between START_INTERVIEW and NEXT_QUESTION
 4. **Face stops animating when switching pages**: Added fallback animation system using setInterval for when page is not focused
+5. **Test audio interferes with questions**: Separated test TTS from interview TTS to prevent audio interference
+6. **Interview starts automatically**: Fixed to only start when explicitly requested via Start Interview button
 
 ## Key Changes
 
@@ -31,6 +33,18 @@
 - Animation continues even when page is not focused
 - Automatic switching between requestAnimationFrame and setInterval based on page visibility
 - Time-based animation for better performance
+
+### Audio System Improvements
+- Separated test TTS from interview TTS to prevent interference
+- Audio tones only generated for actual interview questions (not test audio)
+- Better audio routing control and volume management
+- Improved logging for audio events
+
+### Interview Flow Control
+- Tech stack selection only loads questions, doesn't start interview
+- Interview only starts when explicitly requested via Start Interview button
+- Better session state management and logging
+- Improved error handling for missing questions
 
 ## Testing the Bot
 
