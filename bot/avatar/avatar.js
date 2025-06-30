@@ -74,82 +74,32 @@ function setupTTSStream() {
 }
 
 // --- TTS function that routes audio to the MediaStreamDestination ---
-function speakQuestionToRoom(text) {
+async function speakQuestionToRoom(text) {
     log(`speakQuestionToRoom called with: "${text}"`);
-    log(`isInterviewActive: ${isInterviewActive}`);
-    
-    if (!('speechSynthesis' in window)) {
-        log('TTS not supported in this browser.');
-        return;
-    }
-    
-    if (!isInterviewActive) {
-        log('Interview not active, not speaking.');
-        return;
-    }
-    
-    log('Setting up TTS stream...');
     setupTTSStream();
-    
-    // Ensure audio context is running
-    if (audioContext.state === 'suspended') {
-        log('Audio context suspended, attempting to resume...');
-        audioContext.resume().then(() => {
-            log(`Audio context resumed, state: ${audioContext.state}`);
-            // Try speaking again after resume
-            setTimeout(() => speakQuestionToRoom(text), 100);
-        }).catch(error => {
-            log(`Failed to resume audio context: ${error}`);
+
+    // Fetch TTS audio from your server
+    try {
+        const response = await fetch(`/api/bot/${sessionId}/tts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
         });
-        return;
+        const { audioData, mimeType } = await response.json();
+        const audioBuffer = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
+        const blob = new Blob([audioBuffer], { type: mimeType });
+
+        // Decode and play through the audio context
+        const arrayBuffer = await blob.arrayBuffer();
+        const decodedAudio = await audioContext.decodeAudioData(arrayBuffer);
+        const source = audioContext.createBufferSource();
+        source.buffer = decodedAudio;
+        source.connect(audioGainNode); // Connect to gain node, which connects to ttsDestination
+        source.start();
+        log('TTS audio played through Twilio audio track.');
+    } catch (err) {
+        log('Error fetching or playing TTS audio: ' + err.message);
     }
-    
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-    
-    // Create utterance
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.9; // Slightly slower for clarity
-    utterance.pitch = 1;
-    utterance.volume = 1;
-    
-    log('Created utterance, setting up event handlers...');
-    
-    // Use SpeechSynthesisUtterance events to log and control animation
-    utterance.onstart = () => {
-        log('Bot speaking: ' + text);
-        isSpeaking = true;
-        // No bell/tone sound at all
-        // Notify backend that speech started
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'SPEECH_STARTED' }));
-        }
-    };
-    
-    utterance.onend = () => {
-        log('Bot finished speaking.');
-        isSpeaking = false;
-        // Notify backend that speech ended
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'SPEECH_ENDED' }));
-        }
-    };
-    
-    utterance.onerror = (event) => {
-        log(`TTS error: ${event.error}`);
-        // If it's a not-allowed error, try to resume audio context and retry
-        if (event.error === 'not-allowed' && audioContext.state === 'suspended') {
-            log('Attempting to resume audio context and retry...');
-            audioContext.resume().then(() => {
-                setTimeout(() => speakQuestionToRoom(text), 500);
-            });
-        }
-    };
-    
-    log('Starting speech synthesis...');
-    // Use the browser's default output for local audio
-    window.speechSynthesis.speak(utterance);
 }
 
 // Connect to WebSocket with improved reconnection logic

@@ -10,7 +10,6 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const TranscriptionService = require('./transcription-service');
-const OpenAI = require('openai');
 
 // Placeholder for Twilio, OpenAI, and other integrations
 // const twilio = require('twilio');
@@ -22,7 +21,6 @@ const wss = new Server({ server });
 
 // Initialize transcription service
 const transcriptionService = new TranscriptionService();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Simple logging function
 function log(message) {
@@ -70,24 +68,9 @@ app.post('/api/bot/:sessionId/start', async (req, res) => {
   if (sessions[sessionId].questions && sessions[sessionId].questions.length > 0) {
     const question = sessions[sessionId].questions[0];
     log(`Sending first question: "${question.text}"`);
-    // Call TTS endpoint to generate and broadcast audio
-    try {
-      const ttsRes = await openai.audio.speech.create({
-        model: "tts-1",
-        voice: "alloy",
-        input: question.text,
-      });
-      const buffer = Buffer.from(await ttsRes.arrayBuffer());
-      broadcast(sessionId, {
-        type: 'TTS_AUDIO',
-        audioData: buffer.toString('base64'),
-        mimeType: 'audio/mp3',
-        text: question.text,
-      });
-    } catch (err) {
-      log(`TTS error: ${err.message}`);
-      broadcast(sessionId, { type: 'START_INTERVIEW', question: question.text });
-    }
+    // Call TTS endpoint to generate and broadcast audio (leave as is if TTS is still needed)
+    // If TTS is not needed, just broadcast the question text
+    broadcast(sessionId, { type: 'START_INTERVIEW', question: question.text });
   } else {
     log(`No questions available for session ${sessionId}`);
     broadcast(sessionId, { type: 'START_INTERVIEW' });
@@ -357,31 +340,50 @@ function getNextQuestion(sessionId) {
   return q[idx] || null;
 }
 
+const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
+
+async function generateTTSAudioHuggingFace(text) {
+  // Use Hugging Face Inference API for TTS (e.g., using espnet/kan-bayashi_ljspeech_vits)
+  // You can choose another TTS model if you prefer
+  const response = await axios.post(
+    'https://api-inference.huggingface.co/models/espnet/kan-bayashi_ljspeech_vits',
+    { inputs: text },
+    {
+      headers: {
+        'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+        'Accept': 'application/json',
+      },
+      responseType: 'arraybuffer',
+    }
+  );
+  return Buffer.from(response.data);
+}
+
 // Server-side TTS endpoint
 app.post('/api/bot/:sessionId/tts', async (req, res) => {
   const { sessionId } = req.params;
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'text required' });
   try {
-    // Generate TTS audio with OpenAI
-    const mp3 = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: "alloy",
-      input: text,
+    // Generate TTS audio with Hugging Face
+    const audioBuffer = await generateTTSAudioHuggingFace(text);
+    res.json({
+      audioData: audioBuffer.toString('base64'),
+      mimeType: 'audio/wav'
     });
-    const buffer = Buffer.from(await mp3.arrayBuffer());
-    // Broadcast to all clients in the session
-    broadcast(sessionId, {
-      type: 'TTS_AUDIO',
-      audioData: buffer.toString('base64'),
-      mimeType: 'audio/mp3',
-      text,
-    });
-    res.json({ success: true });
   } catch (err) {
     console.error('TTS error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Health check endpoint for Google Cloud Run
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // --- Start Server ---
