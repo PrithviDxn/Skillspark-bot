@@ -367,13 +367,20 @@ app.post('/api/bot/:sessionId/tts', async (req, res) => {
   try {
     // Generate TTS audio with Hugging Face
     const audioBuffer = await generateTTSAudioHuggingFace(text);
+    // Debug: Log the first few bytes of the buffer
+    console.log('TTS audioBuffer (first 20 bytes):', audioBuffer.slice(0, 20));
+    // If the buffer is empty or too small, return an error
+    if (!audioBuffer || audioBuffer.length < 100) {
+      console.error('TTS audio buffer is empty or too small.');
+      return res.status(500).json({ error: 'TTS audio generation failed (empty buffer)' });
+    }
     res.json({
       audioData: audioBuffer.toString('base64'),
       mimeType: 'audio/wav'
     });
   } catch (err) {
-    console.error('TTS error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('TTS error:', err?.response?.data || err.message || err);
+    res.status(500).json({ error: err.message || 'TTS error' });
   }
 });
 
