@@ -343,10 +343,9 @@ function getNextQuestion(sessionId) {
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
 async function generateTTSAudioHuggingFace(text) {
-  // Use Hugging Face Inference API for TTS (e.g., using espnet/kan-bayashi_ljspeech_vits)
-  // You can choose another TTS model if you prefer
+  // Use Hugging Face Inference API for TTS (facebook/fastspeech2-en-ljspeech)
   const response = await axios.post(
-    'https://api-inference.huggingface.co/models/espnet/kan-bayashi_ljspeech_vits',
+    'https://api-inference.huggingface.co/models/facebook/fastspeech2-en-ljspeech',
     { inputs: text },
     {
       headers: {
