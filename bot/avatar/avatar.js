@@ -78,14 +78,24 @@ async function speakQuestionToRoom(text) {
     log(`speakQuestionToRoom called with: "${text}"`);
     setupTTSStream();
 
-    // Fetch TTS audio from your server
+    // Try server-side TTS first, fallback to browser TTS if it fails
     try {
         const response = await fetch(`/api/bot/${sessionId}/tts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text })
         });
+        
+        if (!response.ok) {
+            throw new Error(`Server TTS failed: ${response.status}`);
+        }
+        
         const { audioData, mimeType } = await response.json();
+        
+        if (!audioData) {
+            throw new Error('No audio data received from server');
+        }
+        
         const audioBuffer = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
         const blob = new Blob([audioBuffer], { type: mimeType });
 
@@ -96,9 +106,45 @@ async function speakQuestionToRoom(text) {
         source.buffer = decodedAudio;
         source.connect(audioGainNode); // Connect to gain node, which connects to ttsDestination
         source.start();
-        log('TTS audio played through Twilio audio track.');
+        log('Server TTS audio played through Twilio audio track.');
     } catch (err) {
-        log('Error fetching or playing TTS audio: ' + err.message);
+        log('Server TTS failed, using browser TTS fallback: ' + err.message);
+        
+        // Fallback to browser speech synthesis
+        try {
+            // Create a simple audio oscillator to route through Twilio
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = 0.1; // Very low volume for the carrier signal
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioGainNode);
+            
+            // Start the oscillator
+            oscillator.start();
+            
+            // Use browser speech synthesis
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+            
+            // Stop the oscillator when speech ends
+            utterance.onend = () => {
+                oscillator.stop();
+                log('Browser TTS fallback completed.');
+            };
+            
+            utterance.onerror = (event) => {
+                oscillator.stop();
+                log('Browser TTS fallback error: ' + event.error);
+            };
+            
+            window.speechSynthesis.speak(utterance);
+            log('Browser TTS fallback started.');
+        } catch (fallbackErr) {
+            log('Both server and browser TTS failed: ' + fallbackErr.message);
+        }
     }
 }
 

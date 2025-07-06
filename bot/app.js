@@ -343,20 +343,66 @@ function getNextQuestion(sessionId) {
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
 async function generateTTSAudioHuggingFace(text) {
-  // Use Hugging Face Inference API for TTS (facebook/fastspeech2-en-ljspeech)
-  const response = await axios.post(
-    'https://api-inference.huggingface.co/models/facebook/fastspeech2-en-ljspeech',
-    { inputs: text },
-    {
-      headers: {
-        'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
-        'Accept': 'application/json',
-      },
-      responseType: 'arraybuffer',
+  // Try multiple TTS models in order of preference
+  const models = [
+    'facebook/fastspeech2-en-ljspeech',
+    'espnet/kan-bayashi_ljspeech_vits',
+    'microsoft/speecht5_tts'
+  ];
+  
+  for (const model of models) {
+    try {
+      console.log(`Trying TTS model: ${model}`);
+      const response = await axios.post(
+        `https://api-inference.huggingface.co/models/${model}`,
+        { inputs: text },
+        {
+          headers: {
+            'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+            'Accept': 'audio/wav',
+          },
+          responseType: 'arraybuffer',
+          timeout: 10000, // 10 second timeout
+        }
+      );
+      
+      if (response.data && response.data.length > 100) {
+        console.log(`Successfully generated TTS audio with model: ${model}`);
+        return Buffer.from(response.data);
+      }
+    } catch (error) {
+      console.log(`Model ${model} failed:`, error?.response?.status || error.message);
+      continue;
     }
-  );
-  return Buffer.from(response.data);
+  }
+  
+  throw new Error('All TTS models failed');
 }
+
+// Test Hugging Face API endpoint
+app.get('/api/bot/test-huggingface', async (req, res) => {
+  try {
+    // Test with a simple text generation model first
+    const response = await axios.post(
+      'https://api-inference.huggingface.co/models/gpt2',
+      { inputs: 'Hello world' },
+      {
+        headers: {
+          'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+          'Accept': 'application/json',
+        },
+      }
+    );
+    res.json({ success: true, message: 'Hugging Face API is working', data: response.data });
+  } catch (err) {
+    console.error('Hugging Face API test error:', err?.response?.data || err.message || err);
+    res.status(500).json({ 
+      error: 'Hugging Face API test failed', 
+      details: err?.response?.data || err.message || err,
+      status: err?.response?.status
+    });
+  }
+});
 
 // Server-side TTS endpoint
 app.post('/api/bot/:sessionId/tts', async (req, res) => {
