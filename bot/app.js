@@ -340,65 +340,46 @@ function getNextQuestion(sessionId) {
   return q[idx] || null;
 }
 
-const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
-async function generateTTSAudioHuggingFace(text) {
-  // Try multiple TTS models in order of preference
-  const models = [
-    'microsoft/DialoGPT-medium', // This is a text model, not TTS, but let's test API access
-    'facebook/fastspeech2-en-ljspeech',
-    'espnet/kan-bayashi_ljspeech_vits',
-    'microsoft/speecht5_tts'
-  ];
-  
-  // First, test if we have API access at all
+async function generateTTSAudioElevenLabs(text) {
+  if (!ELEVENLABS_API_KEY) {
+    throw new Error('ELEVENLABS_API_KEY environment variable is not set');
+  }
+
   try {
-    console.log('Testing Hugging Face API access...');
-    const testResponse = await axios.post(
-      'https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium',
-      { inputs: 'Hello' },
+    console.log('Generating TTS audio with ElevenLabs...');
+    const response = await axios.post(
+      'https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', // Rachel voice
+      { 
+        text,
+        model_id: 'eleven_monolingual_v1',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.5
+        }
+      },
       {
         headers: {
-          'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
-          'Accept': 'application/json',
+          'Accept': 'audio/mpeg',
+          'xi-api-key': ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json'
         },
-        timeout: 5000,
+        responseType: 'arraybuffer',
+        timeout: 15000 // 15 second timeout
       }
     );
-    console.log('Hugging Face API access confirmed');
-  } catch (error) {
-    console.log('Hugging Face API access failed:', error?.response?.status || error.message);
-    throw new Error('Hugging Face API not accessible');
-  }
-  
-  // Now try TTS models
-  for (const model of models.slice(1)) { // Skip the first one as it's not TTS
-    try {
-      console.log(`Trying TTS model: ${model}`);
-      const response = await axios.post(
-        `https://api-inference.huggingface.co/models/${model}`,
-        { inputs: text },
-        {
-          headers: {
-            'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
-            'Accept': 'audio/wav',
-          },
-          responseType: 'arraybuffer',
-          timeout: 10000, // 10 second timeout
-        }
-      );
-      
-      if (response.data && response.data.length > 100) {
-        console.log(`Successfully generated TTS audio with model: ${model}`);
-        return Buffer.from(response.data);
-      }
-    } catch (error) {
-      console.log(`Model ${model} failed:`, error?.response?.status || error.message);
-      continue;
+    
+    if (response.data && response.data.length > 100) {
+      console.log('Successfully generated TTS audio with ElevenLabs');
+      return Buffer.from(response.data);
+    } else {
+      throw new Error('No audio data received from ElevenLabs');
     }
+  } catch (error) {
+    console.error('ElevenLabs TTS error:', error?.response?.data || error.message);
+    throw new Error(`ElevenLabs TTS failed: ${error?.response?.status || error.message}`);
   }
-  
-  throw new Error('All TTS models failed');
 }
 
 // Test Hugging Face API endpoint
@@ -432,8 +413,8 @@ app.post('/api/bot/:sessionId/tts', async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'text required' });
   try {
-    // Generate TTS audio with Hugging Face
-    const audioBuffer = await generateTTSAudioHuggingFace(text);
+    // Generate TTS audio with ElevenLabs
+    const audioBuffer = await generateTTSAudioElevenLabs(text);
     // Debug: Log the first few bytes of the buffer
     console.log('TTS audioBuffer (first 20 bytes):', audioBuffer.slice(0, 20));
     // If the buffer is empty or too small, return an error
@@ -443,7 +424,7 @@ app.post('/api/bot/:sessionId/tts', async (req, res) => {
     }
     res.json({
       audioData: audioBuffer.toString('base64'),
-      mimeType: 'audio/wav'
+      mimeType: 'audio/mpeg'
     });
   } catch (err) {
     console.error('TTS error:', err?.response?.data || err.message || err);
