@@ -345,12 +345,34 @@ const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 async function generateTTSAudioHuggingFace(text) {
   // Try multiple TTS models in order of preference
   const models = [
+    'microsoft/DialoGPT-medium', // This is a text model, not TTS, but let's test API access
     'facebook/fastspeech2-en-ljspeech',
     'espnet/kan-bayashi_ljspeech_vits',
     'microsoft/speecht5_tts'
   ];
   
-  for (const model of models) {
+  // First, test if we have API access at all
+  try {
+    console.log('Testing Hugging Face API access...');
+    const testResponse = await axios.post(
+      'https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium',
+      { inputs: 'Hello' },
+      {
+        headers: {
+          'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+          'Accept': 'application/json',
+        },
+        timeout: 5000,
+      }
+    );
+    console.log('Hugging Face API access confirmed');
+  } catch (error) {
+    console.log('Hugging Face API access failed:', error?.response?.status || error.message);
+    throw new Error('Hugging Face API not accessible');
+  }
+  
+  // Now try TTS models
+  for (const model of models.slice(1)) { // Skip the first one as it's not TTS
     try {
       console.log(`Trying TTS model: ${model}`);
       const response = await axios.post(
