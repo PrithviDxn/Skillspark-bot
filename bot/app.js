@@ -445,4 +445,6 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
   console.log(`SkillSpark Bot backend running on port ${PORT}`);
-}); 
+});
+
+console.log('ELEVENLABS_API_KEY:', process.env.ELEVENLABS_API_KEY ? 'set' : 'NOT SET'); 
