@@ -44,10 +44,13 @@ app.use(cors({
     // Allow your Render domain (if you ever open avatar from there)
     if (origin === 'https://skillspark-bot.onrender.com') return callback(null, true);
 
-    // Otherwise, block
-    return callback(new Error('Not allowed by CORS'), false);
+    // Allow all origins for debugging (remove in production)
+    console.log('CORS origin check:', origin);
+    return callback(null, true);
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Serve bot avatar static files
@@ -382,9 +385,15 @@ async function generateTTSAudioElevenLabs(text) {
   }
 }
 
-// Test Hugging Face API endpoint
+// Test Hugging Face API endpoint (commented out - not needed for core functionality)
+/*
 app.get('/api/bot/test-huggingface', async (req, res) => {
   try {
+    const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
+    if (!HUGGINGFACE_API_KEY) {
+      return res.status(500).json({ error: 'HUGGINGFACE_API_KEY not configured' });
+    }
+    
     // Test with a simple text generation model first
     const response = await axios.post(
       'https://api-inference.huggingface.co/models/gpt2',
@@ -406,6 +415,7 @@ app.get('/api/bot/test-huggingface', async (req, res) => {
     });
   }
 });
+*/
 
 // Server-side TTS endpoint
 app.post('/api/bot/:sessionId/tts', async (req, res) => {

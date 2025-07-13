@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: skillspark-bot
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5001
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_API_KEY_SID
+        sync: false
+      - key: TWILIO_API_KEY_SECRET
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+      - key: MAIN_API_URL
+        value: https://skillspark-api.onrender.com/api/v1
+      - key: QUESTION_API_URL
+        value: https://skillspark-api.onrender.com/api/v1/questions
+      - key: API_URL
+        value: https://skillspark-api.onrender.com/api/v1
+      - key: WS_URL
+        value: wss://skillspark-api.onrender.com
+    healthCheckPath: /health
+    autoDeploy: true
+    plan: standard 
