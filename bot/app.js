@@ -100,43 +100,6 @@ app.post('/api/bot/:sessionId/stop', (req, res) => {
   res.json({ success: true });
 });
 
-// TTS endpoint using ElevenLabs
-app.post('/api/bot/:sessionId/tts', async (req, res) => {
-  const { sessionId } = req.params;
-  const { text } = req.body;
-
-  if (!text) {
-    return res.status(400).json({ error: 'Text is required' });
-  }
-
-  try {
-    const audioBuffer = await generateTTSAudioElevenLabs(text);
-    
-    // Convert audio buffer to base64
-    const audioBase64 = audioBuffer.toString('base64');
-    
-    // Send audio data back to client
-    res.json({
-      success: true,
-      audioData: audioBase64,
-      mimeType: 'audio/mpeg'
-    });
-
-    // Also broadcast to all connected clients for this session
-    broadcast(sessionId, {
-      type: 'TTS_AUDIO',
-      audioData: audioBase64,
-      mimeType: 'audio/mpeg'
-    });
-  } catch (error) {
-    console.error('TTS generation error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
 app.post('/api/bot/:sessionId/instruction', (req, res) => {
   const { sessionId } = req.params;
   const { instruction } = req.body;
@@ -484,4 +447,4 @@ server.listen(PORT, () => {
   console.log(`SkillSpark Bot backend running on port ${PORT}`);
 });
 
-console.log('ELEVENLABS_API_KEY:', process.env.ELEVENLABS_API_KEY ? 'set' : 'NOT SET');
+console.log('ELEVENLABS_API_KEY:', process.env.ELEVENLABS_API_KEY ? 'set' : 'NOT SET'); 
