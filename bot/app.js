@@ -346,12 +346,17 @@ function getNextQuestion(sessionId) {
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
 async function generateTTSAudioElevenLabs(text) {
+  console.log('ELEVENLABS_API_KEY check:', ELEVENLABS_API_KEY ? 'SET' : 'NOT SET');
+  console.log('ELEVENLABS_API_KEY length:', ELEVENLABS_API_KEY ? ELEVENLABS_API_KEY.length : 0);
+  
   if (!ELEVENLABS_API_KEY) {
     throw new Error('ELEVENLABS_API_KEY environment variable is not set');
   }
 
   try {
     console.log('Generating TTS audio with ElevenLabs...');
+    console.log('Using API key:', ELEVENLABS_API_KEY.substring(0, 10) + '...');
+    
     const response = await axios.post(
       'https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', // Rachel voice
       { 
@@ -380,7 +385,17 @@ async function generateTTSAudioElevenLabs(text) {
       throw new Error('No audio data received from ElevenLabs');
     }
   } catch (error) {
-    console.error('ElevenLabs TTS error:', error?.response?.data || error.message);
+    console.error('ElevenLabs TTS error details:');
+    console.error('Status:', error?.response?.status);
+    console.error('Status Text:', error?.response?.statusText);
+    console.error('Headers:', error?.response?.headers);
+    console.error('Data:', error?.response?.data);
+    console.error('Message:', error?.message);
+    
+    if (error?.response?.status === 401) {
+      throw new Error(`ElevenLabs TTS failed: 401 - Invalid API key. Please check ELEVENLABS_API_KEY environment variable.`);
+    }
+    
     throw new Error(`ElevenLabs TTS failed: ${error?.response?.status || error.message}`);
   }
 }
@@ -447,7 +462,12 @@ app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    envCheck: {
+      elevenlabsKeySet: !!process.env.ELEVENLABS_API_KEY,
+      elevenlabsKeyLength: process.env.ELEVENLABS_API_KEY ? process.env.ELEVENLABS_API_KEY.length : 0,
+      port: process.env.PORT || 5001
+    }
   });
 });
 
@@ -457,4 +477,6 @@ server.listen(PORT, () => {
   console.log(`SkillSpark Bot backend running on port ${PORT}`);
 });
 
-console.log('ELEVENLABS_API_KEY:', process.env.ELEVENLABS_API_KEY ? 'set' : 'NOT SET'); 
+console.log('ELEVENLABS_API_KEY:', process.env.ELEVENLABS_API_KEY ? 'set' : 'NOT SET');
+console.log('ELEVENLABS_API_KEY length:', process.env.ELEVENLABS_API_KEY ? process.env.ELEVENLABS_API_KEY.length : 0);
+console.log('ELEVENLABS_API_KEY preview:', process.env.ELEVENLABS_API_KEY ? process.env.ELEVENLABS_API_KEY.substring(0, 10) + '...' : 'NOT SET'); 
